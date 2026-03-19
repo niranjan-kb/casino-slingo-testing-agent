@@ -17,6 +17,7 @@ from workflows import workflow_helpers as helpers
 from workflows.workflow_helpers import (
     LLM_ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT,
     LLM_ACTIVITY_START_TO_CLOSE_TIMEOUT,
+    MCP_TOOL_ACTIVITY_START_TO_CLOSE_TIMEOUT,
 )
 
 with workflow.unsafe.imports_passed_through():
@@ -423,7 +424,7 @@ class AgentGoalWorkflow:
         mcp_tools_result = await workflow.execute_activity(
             mcp_list_tools,
             args=[self.goal.mcp_server_definition, include_tools],
-            start_to_close_timeout=LLM_ACTIVITY_START_TO_CLOSE_TIMEOUT,
+            start_to_close_timeout=MCP_TOOL_ACTIVITY_START_TO_CLOSE_TIMEOUT,
             retry_policy=RetryPolicy(
                 initial_interval=timedelta(seconds=5), backoff_coefficient=1
             ),

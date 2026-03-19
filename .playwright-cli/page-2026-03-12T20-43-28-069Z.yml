@@ -1,0 +1,10 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - heading "Temporal AI Agent 🤖" [level=1] [ref=e5]
+  - generic [ref=e9]: Chat ended
+  - generic [ref=e10]:
+    - generic [ref=e11]:
+      - textbox "Type your message" [disabled] [ref=e12]:
+        - /placeholder: Type your message...
+      - button "Send message" [disabled] [ref=e13]: Send
+    - button "Start new chat" [ref=e15] [cursor=pointer]: Start New Chat

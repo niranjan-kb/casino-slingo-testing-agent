@@ -16,6 +16,7 @@ from shared.config import TEMPORAL_LEGACY_TASK_QUEUE
 # Constants from original file
 TOOL_ACTIVITY_START_TO_CLOSE_TIMEOUT = timedelta(seconds=12)
 TOOL_ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT = timedelta(minutes=30)
+MCP_TOOL_ACTIVITY_START_TO_CLOSE_TIMEOUT = timedelta(seconds=60)
 LLM_ACTIVITY_START_TO_CLOSE_TIMEOUT = timedelta(seconds=20)
 LLM_ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT = timedelta(minutes=30)
 
@@ -67,7 +68,7 @@ async def handle_tool_execution(
                 current_tool,
                 mcp_args,
                 schedule_to_close_timeout=TOOL_ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT,
-                start_to_close_timeout=TOOL_ACTIVITY_START_TO_CLOSE_TIMEOUT,
+                start_to_close_timeout=MCP_TOOL_ACTIVITY_START_TO_CLOSE_TIMEOUT,
                 retry_policy=RetryPolicy(
                     initial_interval=timedelta(seconds=5), backoff_coefficient=1
                 ),

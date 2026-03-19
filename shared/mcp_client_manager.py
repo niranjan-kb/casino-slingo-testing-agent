@@ -1,167 +1,148 @@
 import asyncio
-from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, Dict, Tuple
-
-from temporalio import activity
+import logging
+import os
+from typing import Any, Dict, Optional, Tuple
 
 from models.tool_definitions import MCPServerDefinition
 
 # Import MCP client libraries
-if TYPE_CHECKING:
-    from mcp import ClientSession, StdioServerParameters
-    from mcp.client.stdio import stdio_client
-else:
-    try:
-        from mcp import ClientSession, StdioServerParameters
-        from mcp.client.stdio import stdio_client
-    except ImportError:
-        # Fallback if MCP not installed
-        ClientSession = None
-        StdioServerParameters = None
-        stdio_client = None
+try:
+    from mcp import ClientSession
+    from mcp.client.sse import sse_client
+except ImportError:
+    ClientSession = None
+    sse_client = None
+
+logger = logging.getLogger(__name__)
 
 
 class MCPClientManager:
-    """Manages pooled MCP client connections for reuse across tool calls"""
+    """Persistent MCP connection running in its own asyncio Task.
+
+    appium-mcp ties driver lifecycle to MCP client connection — when the client
+    disconnects, all Appium sessions are cleaned up. To keep sessions alive
+    across Temporal activity calls (which run in different asyncio Tasks), we
+    hold one long-lived SSE connection in a dedicated background task and
+    route all tool calls through an asyncio Queue.
+
+    Usage:
+        manager = MCPClientManager()
+        await manager.start("http://localhost:3100/sse")
+        result = await manager.call_tool("appium_screenshot", {})
+        await manager.stop()
+    """
 
     def __init__(self):
-        self._clients: Dict[str, Any] = {}
-        self._connections: Dict[str, Tuple[Any, Any]] = {}
-        self._lock = asyncio.Lock()
+        self._request_queue: asyncio.Queue = asyncio.Queue()
+        self._task: Optional[asyncio.Task] = None
+        self._ready = asyncio.Event()
+        self._sse_url: Optional[str] = None
 
-    async def get_client(
-        self, server_def: MCPServerDefinition | Dict[str, Any] | None
+    async def start(self, sse_url: str) -> None:
+        """Start the persistent SSE connection in a background task."""
+        if self._task and not self._task.done():
+            logger.info("MCPClientManager already running")
+            return
+
+        self._sse_url = sse_url
+        self._ready.clear()
+        self._task = asyncio.create_task(self._run_loop(sse_url))
+        await self._ready.wait()
+        logger.info(f"MCPClientManager connected to {sse_url}")
+
+    async def _run_loop(self, sse_url: str) -> None:
+        """Background task that holds the SSE connection open and processes requests.
+
+        Auto-reconnects on connection loss with exponential backoff.
+        Fails any pending futures when the connection drops so callers don't hang.
+        """
+        backoff = 1  # seconds
+        max_backoff = 30
+
+        while True:
+            try:
+                async with sse_client(sse_url) as (read, write):
+                    async with ClientSession(read, write) as session:
+                        await session.initialize()
+                        logger.info("MCP session initialized in background task")
+                        backoff = 1  # reset on successful connection
+                        self._ready.set()
+
+                        while True:
+                            request = await self._request_queue.get()
+                            if request is None:
+                                # Shutdown signal
+                                logger.info("MCPClientManager shutting down")
+                                return  # exit the entire method
+
+                            tool_name, args, future = request
+                            try:
+                                result = await session.call_tool(
+                                    tool_name, arguments=args
+                                )
+                                if not future.done():
+                                    future.set_result(result)
+                            except Exception as e:
+                                if not future.done():
+                                    future.set_exception(e)
+            except asyncio.CancelledError:
+                logger.info("MCPClientManager task cancelled")
+                self._drain_pending_futures("MCPClientManager was cancelled")
+                return
+            except Exception as e:
+                logger.error(f"MCPClientManager connection lost: {e}")
+                # Fail any pending futures so callers don't hang forever
+                self._drain_pending_futures(f"MCP connection lost: {e}")
+                # Signal ready on first connect attempt failure so start() doesn't hang
+                if not self._ready.is_set():
+                    self._ready.set()
+                logger.info(f"Reconnecting in {backoff}s...")
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, max_backoff)
+
+    def _drain_pending_futures(self, error_msg: str) -> None:
+        """Fail all pending futures in the queue so callers don't hang."""
+        drained = 0
+        while not self._request_queue.empty():
+            try:
+                item = self._request_queue.get_nowait()
+                if item is None:
+                    continue
+                _, _, future = item
+                if not future.done():
+                    future.set_exception(ConnectionError(error_msg))
+                drained += 1
+            except asyncio.QueueEmpty:
+                break
+        if drained:
+            logger.warning(f"Drained {drained} pending request(s) after disconnect")
+
+    async def call_tool(
+        self, tool_name: str, args: Dict[str, Any]
     ) -> Any:
-        """Return existing client or create new one, keyed by server definition hash"""
-        async with self._lock:
-            key = self._get_server_key(server_def)
-            if key not in self._clients:
-                await self._create_client(server_def, key)
-                activity.logger.info(
-                    f"Created new MCP client for {self._get_server_name(server_def)}"
-                )
-            else:
-                activity.logger.info(
-                    f"Reusing existing MCP client for {self._get_server_name(server_def)}"
-                )
-            return self._clients[key]
-
-    def _get_server_key(
-        self, server_def: MCPServerDefinition | Dict[str, Any] | None
-    ) -> str:
-        """Generate unique key for server definition"""
-        if server_def is None:
-            return "default:python:server.py"
-
-        # Handle both MCPServerDefinition objects and dicts (from Temporal serialization)
-        if isinstance(server_def, dict):
-            name = server_def.get("name", "default")
-            command = server_def.get("command", "python")
-            args = server_def.get("args", ["server.py"])
-        else:
-            name = server_def.name
-            command = server_def.command
-            args = server_def.args
-
-        return f"{name}:{command}:{':'.join(args)}"
-
-    def _get_server_name(
-        self, server_def: MCPServerDefinition | Dict[str, Any] | None
-    ) -> str:
-        """Get server name for logging"""
-        if server_def is None:
-            return "default"
-
-        if isinstance(server_def, dict):
-            return server_def.get("name", "default")
-        else:
-            return server_def.name
-
-    def _build_connection(
-        self, server_def: MCPServerDefinition | Dict[str, Any] | None
-    ) -> Dict[str, Any]:
-        """Build connection parameters from MCPServerDefinition or dict"""
-        if server_def is None:
-            # Default to stdio connection with the main server
-            return {
-                "type": "stdio",
-                "command": "python",
-                "args": ["server.py"],
-                "env": {},
-            }
-
-        # Handle both MCPServerDefinition objects and dicts (from Temporal serialization)
-        if isinstance(server_def, dict):
-            return {
-                "type": server_def.get("connection_type", "stdio"),
-                "command": server_def.get("command", "python"),
-                "args": server_def.get("args", ["server.py"]),
-                "env": server_def.get("env", {}) or {},
-            }
-
-        return {
-            "type": server_def.connection_type,
-            "command": server_def.command,
-            "args": server_def.args,
-            "env": server_def.env or {},
-        }
-
-    @asynccontextmanager
-    async def _stdio_connection(self, command: str, args: list, env: dict):
-        """Create stdio connection to MCP server"""
-        if stdio_client is None:
-            raise Exception("MCP client libraries not available")
-
-        # Create server parameters
-        server_params = StdioServerParameters(command=command, args=args, env=env)
-
-        async with stdio_client(server_params) as (read, write):
-            yield read, write
-
-    async def _create_client(
-        self, server_def: MCPServerDefinition | Dict[str, Any] | None, key: str
-    ):
-        """Create and store new client connection"""
-        connection = self._build_connection(server_def)
-
-        if connection["type"] == "stdio":
-            # Create stdio connection
-            connection_manager = self._stdio_connection(
-                command=connection.get("command", "python"),
-                args=connection.get("args", ["server.py"]),
-                env=connection.get("env", {}),
+        """Send a tool call to the persistent MCP session (called from activity tasks)."""
+        if not self._task or self._task.done():
+            raise RuntimeError(
+                "MCPClientManager not running. Call start() first or set APPIUM_MCP_SSE_URL."
             )
 
-            # Enter the connection context
-            read, write = await connection_manager.__aenter__()
+        loop = asyncio.get_event_loop()
+        future = loop.create_future()
+        await self._request_queue.put((tool_name, args, future))
+        return await future
 
-            # Create and initialize client session
-            session = ClientSession(read, write)
-            await session.initialize()
+    @property
+    def is_running(self) -> bool:
+        return self._task is not None and not self._task.done()
 
-            # Store both the session and connection manager for cleanup
-            self._clients[key] = session
-            self._connections[key] = (connection_manager, read, write)
-        else:
-            raise Exception(f"Unsupported connection type: {connection['type']}")
-
-    async def cleanup(self):
-        """Close all connections gracefully"""
-        async with self._lock:
-            # Close all client sessions
-            for session in self._clients.values():
-                try:
-                    await session.close()
-                except Exception as e:
-                    activity.logger.warning(f"Error closing MCP session: {e}")
-
-            # Exit all connection contexts
-            for connection_manager, read, write in self._connections.values():
-                try:
-                    await connection_manager.__aexit__(None, None, None)
-                except Exception as e:
-                    activity.logger.warning(f"Error closing MCP connection: {e}")
-
-            self._clients.clear()
-            self._connections.clear()
-            activity.logger.info("All MCP connections closed")
+    async def stop(self) -> None:
+        """Gracefully shut down the background connection."""
+        if self._task and not self._task.done():
+            await self._request_queue.put(None)
+            try:
+                await asyncio.wait_for(self._task, timeout=10)
+            except asyncio.TimeoutError:
+                self._task.cancel()
+                logger.warning("MCPClientManager task cancelled after timeout")
+        self._task = None
+        logger.info("MCPClientManager stopped")

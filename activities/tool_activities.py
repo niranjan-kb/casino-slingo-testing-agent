@@ -25,13 +25,32 @@ from shared.mcp_client_manager import MCPClientManager
 try:
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
+    from mcp.client.sse import sse_client
 except ImportError:
     # Fallback if MCP not installed
     ClientSession = None
     StdioServerParameters = None
     stdio_client = None
+    sse_client = None
 
 load_dotenv(override=True)
+
+# Module-level persistent MCP manager — shared across all activity calls
+_persistent_mcp_manager: Optional[MCPClientManager] = None
+
+
+def get_persistent_mcp_manager() -> Optional[MCPClientManager]:
+    """Get the module-level persistent MCP manager (if running)."""
+    global _persistent_mcp_manager
+    if _persistent_mcp_manager and _persistent_mcp_manager.is_running:
+        return _persistent_mcp_manager
+    return None
+
+
+def set_persistent_mcp_manager(manager: MCPClientManager) -> None:
+    """Set the module-level persistent MCP manager (called from worker startup)."""
+    global _persistent_mcp_manager
+    _persistent_mcp_manager = manager
 
 
 class ToolActivities:
@@ -305,6 +324,7 @@ def _build_connection(
             "command": server_definition.get("command", "python"),
             "args": server_definition.get("args", ["server.py"]),
             "env": server_definition.get("env", {}) or {},
+            "sse_url": server_definition.get("sse_url"),
         }
 
     return {
@@ -312,20 +332,66 @@ def _build_connection(
         "command": server_definition.command,
         "args": server_definition.args,
         "env": server_definition.env or {},
+        "sse_url": getattr(server_definition, "sse_url", None),
     }
 
 
 def _normalize_result(result: Any) -> Any:
-    """Normalize MCP tool result for serialization"""
+    """Normalize MCP tool result for serialization.
+
+    Large image payloads (base64 screenshots) are saved to files to avoid
+    exceeding Temporal's ~2MB payload limit.
+    """
     if hasattr(result, "content"):
-        # Handle MCP result objects
         if hasattr(result.content, "__iter__") and not isinstance(result.content, str):
-            return [
-                item.text if hasattr(item, "text") else str(item)
-                for item in result.content
-            ]
+            normalized = []
+            for item in result.content:
+                item_type = getattr(item, "type", None)
+
+                # Handle base64 image content — save to file
+                if item_type == "image" and hasattr(item, "data"):
+                    filepath = _save_screenshot(item.data, getattr(item, "mimeType", "image/png"))
+                    normalized.append(f"Screenshot saved to: {filepath}")
+                elif hasattr(item, "text"):
+                    text = item.text
+                    # Catch base64-encoded images embedded in text fields
+                    if len(text) > 50000 and ("base64" in text[:200].lower() or text[:20].startswith("iVBOR")):
+                        filepath = _save_screenshot(text, "image/png")
+                        normalized.append(f"Screenshot saved to: {filepath}")
+                    else:
+                        normalized.append(text)
+                else:
+                    s = str(item)
+                    if len(s) > 50000:
+                        normalized.append(s[:500] + f"... [truncated, {len(s)} chars total]")
+                    else:
+                        normalized.append(s)
+            return normalized
         return str(result.content)
     return result
+
+
+def _save_screenshot(data: str, mime_type: str = "image/png") -> str:
+    """Save base64 screenshot data to a file and return the path."""
+    import base64
+
+    screenshots_dir = os.path.join(os.getcwd(), "screenshots")
+    os.makedirs(screenshots_dir, exist_ok=True)
+
+    ext = "png" if "png" in mime_type else "jpg"
+    timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+    filepath = os.path.join(screenshots_dir, f"screenshot_{timestamp}.{ext}")
+
+    # Remove data URI prefix if present
+    if "," in data[:100]:
+        data = data.split(",", 1)[1]
+
+    with open(filepath, "wb") as f:
+        f.write(base64.b64decode(data))
+
+    logger_msg = f"Screenshot saved: {filepath} ({os.path.getsize(filepath)} bytes)"
+    activity.logger.info(logger_msg)
+    return filepath
 
 
 def _convert_args_types(tool_args: Dict[str, Any]) -> Dict[str, Any]:
@@ -371,48 +437,39 @@ async def _execute_mcp_tool(
     connection = _build_connection(server_definition)
 
     try:
-        if connection["type"] == "stdio":
-            # Handle stdio connection
+        if connection["type"] == "sse" and connection.get("sse_url"):
+            # Use the persistent manager (keeps session alive across calls)
+            manager = get_persistent_mcp_manager()
+            if manager:
+                activity.logger.info(
+                    f"Using persistent MCP manager for {tool_name}"
+                )
+                result = await manager.call_tool(tool_name, converted_args)
+                activity.logger.info(f"MCP tool {tool_name} returned result: {result}")
+                normalized_result = _normalize_result(result)
+                activity.logger.info(f"MCP tool {tool_name} completed successfully")
+                return {
+                    "tool": tool_name,
+                    "success": True,
+                    "content": normalized_result,
+                }
+            else:
+                # Fallback: ephemeral SSE connection (session won't persist)
+                activity.logger.warning(
+                    "Persistent MCP manager not available, using ephemeral SSE connection"
+                )
+                return await _execute_via_sse(
+                    tool_name, converted_args, connection["sse_url"]
+                )
+
+        elif connection["type"] == "stdio":
+            # Handle stdio connection (spawns new process per call)
             async with _stdio_connection(
                 command=connection.get("command", "python"),
                 args=connection.get("args", ["server.py"]),
                 env=connection.get("env", {}),
             ) as (read, write):
-                async with ClientSession(read, write) as session:
-                    # Initialize the session
-                    activity.logger.info(f"Initializing MCP session for {tool_name}")
-                    await session.initialize()
-                    activity.logger.info(f"MCP session initialized for {tool_name}")
-
-                    # Call the tool
-                    activity.logger.info(
-                        f"Calling MCP tool {tool_name} with args: {converted_args}"
-                    )
-                    try:
-                        result = await session.call_tool(
-                            tool_name, arguments=converted_args
-                        )
-                        activity.logger.info(
-                            f"MCP tool {tool_name} returned result: {result}"
-                        )
-                    except Exception as tool_exc:
-                        activity.logger.error(
-                            f"MCP tool {tool_name} call failed: {type(tool_exc).__name__}: {tool_exc}"
-                        )
-                        raise
-
-                    normalized_result = _normalize_result(result)
-                    activity.logger.info(f"MCP tool {tool_name} completed successfully")
-
-                    return {
-                        "tool": tool_name,
-                        "success": True,
-                        "content": normalized_result,
-                    }
-
-        elif connection["type"] == "tcp":
-            # Handle TCP connection (placeholder for future implementation)
-            raise ApplicationError("TCP connections not yet implemented")
+                return await _call_mcp_tool(tool_name, converted_args, read, write)
 
         else:
             raise ApplicationError(f"Unsupported connection type: {connection['type']}")
@@ -429,14 +486,64 @@ async def _execute_mcp_tool(
         }
 
 
+async def _call_mcp_tool(
+    tool_name: str, converted_args: Dict[str, Any], read, write
+) -> Dict[str, Any]:
+    """Call an MCP tool over an established read/write connection"""
+    async with ClientSession(read, write) as session:
+        activity.logger.info(f"Initializing MCP session for {tool_name}")
+        await session.initialize()
+        activity.logger.info(f"MCP session initialized for {tool_name}")
+
+        activity.logger.info(
+            f"Calling MCP tool {tool_name} with args: {converted_args}"
+        )
+        try:
+            result = await session.call_tool(tool_name, arguments=converted_args)
+            activity.logger.info(f"MCP tool {tool_name} returned result: {result}")
+        except Exception as tool_exc:
+            activity.logger.error(
+                f"MCP tool {tool_name} call failed: {type(tool_exc).__name__}: {tool_exc}"
+            )
+            raise
+
+        normalized_result = _normalize_result(result)
+        activity.logger.info(f"MCP tool {tool_name} completed successfully")
+
+        return {
+            "tool": tool_name,
+            "success": True,
+            "content": normalized_result,
+        }
+
+
+async def _execute_via_sse(
+    tool_name: str, converted_args: Dict[str, Any], sse_url: str
+) -> Dict[str, Any]:
+    """Execute an MCP tool via SSE connection to a persistent server"""
+    if sse_client is None:
+        raise ApplicationError("MCP SSE client not available")
+
+    activity.logger.info(f"Connecting to MCP server via SSE: {sse_url}")
+    async with sse_client(sse_url) as (read, write):
+        return await _call_mcp_tool(tool_name, converted_args, read, write)
+
+
 @asynccontextmanager
 async def _stdio_connection(command: str, args: list, env: dict):
     """Create stdio connection to MCP server"""
     if stdio_client is None:
         raise ApplicationError("MCP client libraries not available")
 
-    # Create server parameters
-    server_params = StdioServerParameters(command=command, args=args, env=env)
+    # Explicitly pass os.environ so the subprocess inherits PATH, ANDROID_HOME, etc.
+    # StdioServerParameters(env=None) may not reliably inherit the parent env in all MCP client versions.
+    # Merge any non-empty overrides from the caller on top of the full parent environment.
+    merged_env = dict(os.environ)
+    if env:
+        for k, v in env.items():
+            if v:  # only override with non-empty values
+                merged_env[k] = v
+    server_params = StdioServerParameters(command=command, args=args, env=merged_env)
 
     async with stdio_client(server_params) as (read, write):
         yield read, write
@@ -452,49 +559,45 @@ async def mcp_list_tools(
 
     connection = _build_connection(server_definition)
 
+    async def _list_tools_on_session(read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            tools_response = await session.list_tools()
+            tools_info = {}
+            for tool in tools_response.tools:
+                if include_tools is None or tool.name in include_tools:
+                    tools_info[tool.name] = {
+                        "name": tool.name,
+                        "description": tool.description,
+                        "inputSchema": (
+                            tool.inputSchema.model_dump()
+                            if hasattr(tool.inputSchema, "model_dump")
+                            else str(tool.inputSchema)
+                        ),
+                    }
+            activity.logger.info(
+                f"Found {len(tools_info)} tools for server {server_definition.name}"
+            )
+            return {
+                "server_name": server_definition.name,
+                "success": True,
+                "tools": tools_info,
+                "total_available": len(tools_response.tools),
+                "filtered_count": len(tools_info),
+            }
+
     try:
-        if connection["type"] == "stdio":
+        if connection["type"] == "sse" and connection.get("sse_url"):
+            async with sse_client(connection["sse_url"]) as (read, write):
+                return await _list_tools_on_session(read, write)
+
+        elif connection["type"] == "stdio":
             async with _stdio_connection(
                 command=connection.get("command", "python"),
                 args=connection.get("args", ["server.py"]),
                 env=connection.get("env", {}),
             ) as (read, write):
-                async with ClientSession(read, write) as session:
-                    # Initialize the session
-                    await session.initialize()
-
-                    # List available tools
-                    tools_response = await session.list_tools()
-
-                    # Process tools based on include_tools filter
-                    tools_info = {}
-                    for tool in tools_response.tools:
-                        # If include_tools is specified, only include those tools
-                        if include_tools is None or tool.name in include_tools:
-                            tools_info[tool.name] = {
-                                "name": tool.name,
-                                "description": tool.description,
-                                "inputSchema": (
-                                    tool.inputSchema.model_dump()
-                                    if hasattr(tool.inputSchema, "model_dump")
-                                    else str(tool.inputSchema)
-                                ),
-                            }
-
-                    activity.logger.info(
-                        f"Found {len(tools_info)} tools for server {server_definition.name}"
-                    )
-
-                    return {
-                        "server_name": server_definition.name,
-                        "success": True,
-                        "tools": tools_info,
-                        "total_available": len(tools_response.tools),
-                        "filtered_count": len(tools_info),
-                    }
-
-        elif connection["type"] == "tcp":
-            raise ApplicationError("TCP connections not yet implemented")
+                return await _list_tools_on_session(read, write)
 
         else:
             raise ApplicationError(f"Unsupported connection type: {connection['type']}")

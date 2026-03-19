@@ -34,17 +34,36 @@ FBG is a casino operator, not a game studio. We test the app as a platform — g
 
 ### Quick Start with Docker
 ```bash
-# Start all services with development hot-reload
+# Start all services (Temporal healthcheck ensures API/worker start only after Temporal is ready)
 docker compose up -d
 
 # Quick rebuild without infrastructure
 docker compose up -d --no-deps --build api worker frontend
+
+### correct setup config
+docker compose -f docker-compose.yml up temporal postgresql temporal-ui api frontend train-api
+PLATFORM=android uv run scripts/run_worker_android.py
+
 ```
 
 Default URLs:
 - Temporal UI: http://localhost:8080
-- API: http://localhost:8000  
+- API: http://localhost:8000
 - Frontend: http://localhost:5173
+
+**Troubleshooting: "Error fetching conversation" on the frontend**
+
+If the API or worker failed to start (usually because Temporal wasn't ready yet), restart them:
+```bash
+# Check which services are healthy
+docker compose ps
+
+# Restart API and worker
+docker compose restart api worker
+
+# Verify API is responding
+curl http://localhost:8000/get-conversation-history
+```
 
 ### Local Development Setup
 

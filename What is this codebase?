@@ -1,0 +1,26 @@
+The worker is a Python process that:
+
+Connects to Temporal — polls agent-task-queue for work
+
+Registers activities it can execute:
+
+agent_validatePrompt — asks LLM if user input makes sense for the current goal
+agent_toolPlanner — asks LLM what tool to call next and with what args
+get_wf_env_vars — reads env vars like SHOW_CONFIRM
+mcp_tool_activity — executes a tool via MCP (this is where mobile-mcp/ADB gets called)
+mcp_list_tools — discovers what tools an MCP server exposes
+Registers the AgentGoalWorkflow — the workflow definition that orchestrates the loop:
+
+Wait for user message → validate → ask LLM what to do → ask user to confirm → execute tool → repeat
+Manages MCP connections via MCPClientManager — starts/stops npx @anthropic/mobile-mcp as a subprocess
+
+The synergy would be: your agent calls SlotBot's state detection as a tool, gets back a structured game state ("state": "wild_selection"), and then the LLM decides what to do with that information.
+two fundamentally different approaches:
+
+SlotBot	Your Agent
+How it works	Deterministic state machine	LLM-driven decisions
+Game knowledge	YAML config + OpenCV image templates	Natural language description + screenshots
+Language	Java/Kotlin	Python
+Platform	Selenium/browser only	Mobile + Web
+Handles unexpected states	No — fixed state transitions	Yes — LLM adapts
+What it produces	Automated execution	QA report with observations

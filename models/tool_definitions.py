@@ -12,6 +12,7 @@ class MCPServerDefinition:
     env: Optional[Dict[str, str]] = None
     connection_type: str = "stdio"
     included_tools: Optional[List[str]] = None
+    sse_url: Optional[str] = None  # e.g. "http://localhost:3100/sse" for persistent MCP servers
 
 
 @dataclass

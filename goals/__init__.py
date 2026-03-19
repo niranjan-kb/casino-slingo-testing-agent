@@ -6,6 +6,8 @@ from goals.agent_selection import agent_selection_goals
 from goals.ecommerce import ecommerce_goals
 from goals.finance import finance_goals
 from goals.food import food_goals
+from goals.slingo_qa import slingo_qa_goals
+from goals.slingo_qa_android import slingo_qa_android_goals
 from goals.hr import hr_goals
 from goals.stripe_mcp import mcp_goals
 from goals.travel import travel_goals
@@ -19,6 +21,8 @@ goal_list.extend(finance_goals)
 goal_list.extend(ecommerce_goals)
 goal_list.extend(mcp_goals)
 goal_list.extend(food_goals)
+goal_list.extend(slingo_qa_goals)
+goal_list.extend(slingo_qa_android_goals)
 
 # for multi-goal, just set list agents as the last tool
 first_goal_value = os.getenv("AGENT_GOAL")

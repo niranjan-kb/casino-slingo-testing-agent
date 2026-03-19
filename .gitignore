@@ -33,6 +33,15 @@ coverage.xml
 
 .env
 .env*
+!.env.example
 
 # Cursor
 .cursor
+
+# Screen map DB (generated, per-device)
+data/*.db
+data/*.db-wal
+data/*.db-shm
+
+# Screenshots captured during test runs
+screenshots/

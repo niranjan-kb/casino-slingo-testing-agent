@@ -15,7 +15,7 @@ The agent plays casino games on the Fanatics Casino app and reports results. The
 5. Play one full round (5 spins, handle wilds, end game)
 6. Record ending balance, report the delta
 
-The LLM decides every action: what to screenshot, where to tap, how to handle game events. Device interaction happens through mobile-mcp tools (`mobile_take_screenshot`, `mobile_click_on_screen_at_coordinates`, `mobile_type_keys`, etc.) executed as Temporal activities.
+The LLM decides every action: what to screenshot, where to tap, how to handle game events. Device interaction happens through appium-mcp tools (`take_screenshot`, `mobile_click_on_screen_at_coordinates`, `mobile_type_keys`, etc.) executed as Temporal activities.
 
 ## Why This Approach
 
@@ -129,3 +129,6 @@ See [testing guide](docs/testing.md) for details.
 - **Phase 1** (now): Slingo Cash Eruption on Android emulator, single game, balance tracking
 - **Phase 2**: proxyman-mcp (network validation), launchdarkly-mcp (feature flags), iOS support
 - **Phase 3**: Multi-game coverage (100+ games), AWS Device Farm, CI/CD integration via Bitrise
+
+
+  SlotBot is built for slot machines (linear state machines with fixed click targets). Slingo is a strategy game with decision points — that's @what we are.md

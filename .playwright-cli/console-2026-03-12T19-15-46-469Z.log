@@ -1,0 +1,725 @@
+[     509ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5173/favicon.ico:0
+[  358682ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_RESET @ http://127.0.0.1:8000/get-conversation-history:0
+[  358682ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  358683ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_RESET @ http://127.0.0.1:8000/get-conversation-history:0
+[  358683ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  358947ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  358947ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  359546ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  359546ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  360147ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  360147ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  360746ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  360746ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  361346ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  361346ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  361948ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  361948ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  362547ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  362547ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  363147ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  363147ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  363747ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  363747ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  364347ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  364347ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  364947ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  364947ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  365547ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  365547ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  366147ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  366147ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  366747ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  366747ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  367348ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  367348ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  367947ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  367947ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  368547ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  368547ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  369147ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  369147ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  369747ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  369747ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  370347ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  370347ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  370947ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  370947ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  371547ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  371547ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  372147ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  372147ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  372748ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  372749ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  373347ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  373347ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  373947ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  373947ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  374547ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  374547ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  375147ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  375147ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  375747ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  375747ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  376346ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  376346ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  376947ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  376947ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  377547ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  377547ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  378147ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  378147ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  378747ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  378747ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  379346ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  379347ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  379946ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  379946ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  380547ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  380547ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  381149ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  381149ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  381748ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  381748ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  382347ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  382347ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  382947ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  382947ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  383546ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  383546ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  384147ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  384147ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  384747ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  384747ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  385346ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  385346ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  385947ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  385947ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  386547ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  386547ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  387147ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  387147ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  387748ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  387748ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  388347ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  388347ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  388947ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  388947ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  389548ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  389548ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  390147ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  390147ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  390747ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  390747ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  391347ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  391347ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  391948ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  391948ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  392547ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  392547ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  393147ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  393147ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  393746ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  393746ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  394349ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  394349ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  394948ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  394948ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  395547ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  395547ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  396149ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  396149ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  396747ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  396748ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  397349ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  397350ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  397947ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  397947ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  398547ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  398547ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  399149ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  399149ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  399748ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  399748ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  400348ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  400348ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  400946ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  400946ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  401547ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  401548ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  402148ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  402148ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  402747ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  402747ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  403348ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  403348ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  403947ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  403947ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  404547ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  404548ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  405148ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  405148ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  405748ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  405748ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  406348ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  406348ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  406950ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  406951ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  407550ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  407550ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  408147ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  408147ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  408747ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  408748ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  409346ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  409346ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  409947ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  409947ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  410548ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  410548ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  411146ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  411146ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  411747ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  411747ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  412347ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  412347ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  412948ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  412948ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  413546ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  413546ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  414147ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  414147ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  414747ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  414747ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  415347ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  415347ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  415947ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  415947ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  416550ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  416551ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  417147ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  417147ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  417748ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  417748ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  418350ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  418350ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  418946ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  418947ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  419549ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  419549ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  420147ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  420147ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  420746ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  420746ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  421346ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  421346ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  421946ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  421946ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  422548ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  422548ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  423147ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  423147ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  423748ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  423748ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  424348ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  424348ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  424947ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  424948ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  425547ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  425547ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  426146ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  426146ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  426747ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  426747ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  427347ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  427347ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  427949ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  427949ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  428547ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  428547ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  429149ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  429149ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  429745ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  429745ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  430348ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  430348ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  430948ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  430948ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  431548ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  431548ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  432148ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  432148ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  432747ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  432747ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  433347ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  433347ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  433947ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  433947ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  434548ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  434548ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  435146ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  435146ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  435747ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  435747ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  436347ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  436347ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  436946ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  436946ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  437546ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  437546ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  438147ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  438147ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  438749ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  438749ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  439348ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  439348ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  439947ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  439947ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  440548ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  440548ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  441148ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  441148ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  441747ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  441747ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  442347ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  442347ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  442948ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  442948ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  443546ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  443546ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  444149ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  444149ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  444745ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  444745ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  445347ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  445347ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  445946ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  445946ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  446546ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  446546ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  447146ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  447146ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  447745ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  447745ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  448347ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  448347ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  448946ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  448946ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  449547ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  449547ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  450146ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8000/get-conversation-history:0
+[  450146ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  450746ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_RESET @ http://127.0.0.1:8000/get-conversation-history:0
+[  450746ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  451348ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_RESET @ http://127.0.0.1:8000/get-conversation-history:0
+[  451348ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  451947ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_RESET @ http://127.0.0.1:8000/get-conversation-history:0
+[  451947ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  452549ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_RESET @ http://127.0.0.1:8000/get-conversation-history:0
+[  452549ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  453145ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_RESET @ http://127.0.0.1:8000/get-conversation-history:0
+[  453145ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  453748ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_RESET @ http://127.0.0.1:8000/get-conversation-history:0
+[  453748ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  454346ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_RESET @ http://127.0.0.1:8000/get-conversation-history:0
+[  454346ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[  454947ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_RESET @ http://127.0.0.1:8000/get-conversation-history:0
+[  454947ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[ 3852903ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_RESET @ http://127.0.0.1:8000/get-conversation-history:0
+[ 3852903ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[ 3853504ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_RESET @ http://127.0.0.1:8000/get-conversation-history:0
+[ 3853504ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[ 3854104ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_RESET @ http://127.0.0.1:8000/get-conversation-history:0
+[ 3854104ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[ 3854704ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_RESET @ http://127.0.0.1:8000/get-conversation-history:0
+[ 3854705ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[ 3855305ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_RESET @ http://127.0.0.1:8000/get-conversation-history:0
+[ 3855305ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[ 3855904ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_RESET @ http://127.0.0.1:8000/get-conversation-history:0
+[ 3855904ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[ 3856503ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_RESET @ http://127.0.0.1:8000/get-conversation-history:0
+[ 3856503ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[ 3857104ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_RESET @ http://127.0.0.1:8000/get-conversation-history:0
+[ 3857104ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[ 3857704ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_RESET @ http://127.0.0.1:8000/get-conversation-history:0
+[ 3857704ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[ 3858305ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_RESET @ http://127.0.0.1:8000/get-conversation-history:0
+[ 3858305ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[ 3858916ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_RESET @ http://127.0.0.1:8000/get-conversation-history:0
+[ 3858916ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[ 3911310ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://127.0.0.1:8000/get-conversation-history:0
+[ 3911311ms] [ERROR] fetching conversation: ApiError: An error occurred
+    at handleResponse (http://localhost:5173/src/services/api.js:26:15)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[ 3911349ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[ 3911349ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[ 3911349ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[ 3911349ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[ 3911349ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[ 3911349ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[ 3911349ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
+[ 3911349ms] [ERROR] fetching conversation: ApiError: Failed to fetch conversation history
+    at Object.getConversationHistory (http://localhost:5173/src/services/api.js:59:19)
+    at async http://localhost:5173/src/pages/App.jsx:97:20 @ http://localhost:5173/src/pages/App.jsx:58
