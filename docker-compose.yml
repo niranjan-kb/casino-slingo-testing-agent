@@ -74,6 +74,8 @@ services:
       - .env
     environment:
       - TEMPORAL_ADDRESS=temporal:7233
+    volumes:
+      - ./screenshots:/app/screenshots
 
   worker:
     build:

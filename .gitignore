@@ -42,6 +42,21 @@ coverage.xml
 data/*.db
 data/*.db-wal
 data/*.db-shm
+data/last_device.txt
 
-# Screenshots captured during test runs
+# Screenshots and test evidence
 screenshots/
+evidence/
+
+# Playwright CLI debug artifacts
+.playwright-cli/
+
+# Per-user agent state (shared agent config stays under .claude/)
+.claude/scheduled_tasks.lock
+.claude/settings.local.json
+
+# Run artifacts (markdown session reports go here, one per run)
+reports/
+
+# Reference/external repos cloned alongside the project
+SlotBot/

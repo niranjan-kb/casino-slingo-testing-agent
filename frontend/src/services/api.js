@@ -115,7 +115,7 @@ export const apiService = {
 
     async confirm() {
         try {
-            const res = await fetchWithTimeout(`${API_BASE_URL}/confirm`, { 
+            const res = await fetchWithTimeout(`${API_BASE_URL}/confirm`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -131,5 +131,24 @@ export const apiService = {
                 error.status || 500
             );
         }
+    },
+
+    async listScreenshots() {
+        try {
+            const res = await fetchWithTimeout(`${API_BASE_URL}/screenshots`);
+            return handleResponse(res);
+        } catch (error) {
+            if (error instanceof ApiError) {
+                throw error;
+            }
+            throw new ApiError(
+                'Failed to list screenshots',
+                error.status || 500
+            );
+        }
+    },
+
+    getScreenshotUrl(filename) {
+        return `${API_BASE_URL}/screenshots/${encodeURIComponent(filename)}`;
     }
-}; 
+};

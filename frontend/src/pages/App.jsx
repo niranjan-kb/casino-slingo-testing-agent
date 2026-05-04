@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import NavBar from "../components/NavBar";
 import ChatWindow from "../components/ChatWindow";
+import ScreenshotSidebar from "../components/ScreenshotSidebar";
 import { apiService } from "../services/api";
 
 const POLL_INTERVAL = 600; // 0.6 seconds
@@ -221,7 +222,7 @@ export default function App() {
 
     return (
         <div className="flex flex-col h-screen">
-            <NavBar title="Temporal AI Agent 🤖" />
+            <NavBar title="Casino Slingo Tester" />
 
             {error.visible && (
                 <div className="fixed top-16 left-1/2 transform -translate-x-1/2 
@@ -231,8 +232,10 @@ export default function App() {
                 </div>
             )}
 
+            <ScreenshotSidebar />
+
             <div className="flex-grow flex justify-center px-4 py-2 overflow-hidden">
-                <div className="w-full max-w-lg bg-white dark:bg-gray-900 p-8 px-3 rounded shadow-md 
+                <div className="w-full max-w-lg bg-white dark:bg-gray-900 p-8 px-3 rounded shadow-md
                     flex flex-col overflow-hidden">
                     <div ref={containerRef} 
                         className="flex-grow overflow-y-auto pb-20 pt-10 scroll-smooth">

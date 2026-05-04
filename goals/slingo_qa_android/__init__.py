@@ -8,6 +8,16 @@ from goals.slingo_qa_android.prompt_loader import (
 from models.tool_definitions import AgentGoal
 from shared.mcp_config import get_appium_mcp_server_definition
 from shared.screen_map_db import ScreenMapDB
+from tools.tool_registry import (
+    slingo_detect_screen_tool,
+    slingo_generate_report_tool,
+    slingo_lookup_coords_tool,
+    slingo_save_evidence_tool,
+    slingo_smart_tap_tool,
+    slingo_tap_coordinate_tool,
+    slingo_verify_tap_tool,
+    slingo_wait_seconds_tool,
+)
 
 # appium-mcp tools required for Android Slingo QA
 _ANDROID_TOOLS = [
@@ -17,18 +27,28 @@ _ANDROID_TOOLS = [
     "appium_set_value",
     "appium_get_text",
     "appium_find_element",
-    "appium_activate_app",
-    "appium_terminate_app",
-    "appium_get_contexts",
-    "appium_switch_context",
+    "appium_get_page_source",
+    "appium_app",
+    "appium_context",
     "appium_mobile_press_key",
-    "appium_handle_alert",
+    "appium_alert",
     "appium_scroll",
     "appium_swipe",
     "create_session",
     "delete_session",
-    "select_platform",
     "select_device",
+]
+
+# Local Python tools for the Slingo QA agent
+_SLINGO_TOOLS = [
+    slingo_smart_tap_tool,
+    slingo_wait_seconds_tool,
+    slingo_tap_coordinate_tool,
+    slingo_detect_screen_tool,
+    slingo_lookup_coords_tool,
+    slingo_verify_tap_tool,
+    slingo_save_evidence_tool,
+    slingo_generate_report_tool,
 ]
 
 
@@ -48,7 +68,7 @@ def build_goal(db: ScreenMapDB = None) -> AgentGoal:
             "and report QA results. Self-improving — learns coordinates per device over time. "
             "Supports login with OTP, game navigation, and full end-to-end test flows."
         ),
-        tools=[],
+        tools=list(_SLINGO_TOOLS),
         mcp_server_definition=get_appium_mcp_server_definition(
             platform="android",
             included_tools=_ANDROID_TOOLS,

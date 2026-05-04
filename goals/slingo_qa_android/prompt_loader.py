@@ -1,7 +1,7 @@
 """
 Loads and assembles the multi-file prompt for the Slingo QA Android agent.
 
-Reads markdown files from prompts/, injects environment variables,
+Reads markdown files from the goal's prompts/ directory, injects environment variables,
 and populates dynamic sections from the screen map database.
 """
 
@@ -22,15 +22,41 @@ def load_prompt_file(filename: str) -> str:
 
 def inject_env_vars(text: str) -> str:
     """Replace {{VAR}} placeholders with environment values."""
+    build_env = (os.getenv("BUILD_ENV", "dev") or "dev").strip().lower()
+    default_otp = (os.getenv("DEFAULT_OTP", "864408") or "").strip()
+
+    # APP_PACKAGE: explicit env wins, else derive from BUILD_ENV (prod has no suffix).
+    explicit_pkg = os.getenv("APP_PACKAGE")
+    if explicit_pkg:
+        app_package = explicit_pkg
+    elif build_env in {"dev", "test", "cert"}:
+        app_package = f"com.betfanatics.casino.{build_env}"
+    else:
+        app_package = "com.betfanatics.casino"
+
+    if build_env in {"dev", "test"} and default_otp:
+        otp_policy = (
+            f"AUTO-OTP: BUILD_ENV is `{build_env}`. Use the fixed OTP `{default_otp}` "
+            "WITHOUT asking the user. Type it directly into the OTP input."
+        )
+    else:
+        otp_policy = (
+            f"ASK-USER-OTP: BUILD_ENV is `{build_env}`. Ask the user for the OTP "
+            "code sent via SMS (`next='question'`) and wait for their reply."
+        )
+
     replacements = {
         "{{ANDROID_SERIAL}}": os.getenv("ANDROID_SERIAL", "emulator-5554"),
         "{{DEVICE_RESOLUTION}}": os.getenv("DEVICE_RESOLUTION", "1080x1920"),
-        "{{APP_PACKAGE}}": os.getenv("APP_PACKAGE", "com.betfanatics.casino"),
-        "{{BUILD_ENV}}": os.getenv("BUILD_ENV", "dev"),
+        "{{APP_PACKAGE}}": app_package,
+        "{{BUILD_ENV}}": build_env,
         "{{PRODUCT_FLAVOR}}": os.getenv("PRODUCT_FLAVOR", "casino"),
         "{{PLATFORM}}": os.getenv("PLATFORM", "android"),
         "{{TEST_EMAIL}}": os.getenv("TEST_EMAIL", "not configured"),
+        "{{TEST_PASSWORD}}": os.getenv("TEST_PASSWORD", ""),
         "{{TEST_PASSWORD_STATUS}}": "configured" if os.getenv("TEST_PASSWORD") else "not configured",
+        "{{DEFAULT_OTP}}": default_otp or "<not configured>",
+        "{{OTP_POLICY}}": otp_policy,
     }
     for placeholder, value in replacements.items():
         text = text.replace(placeholder, value)
@@ -202,14 +228,13 @@ def assemble_description(db: Optional[ScreenMapDB] = None) -> str:
     Returns:
         Complete agent description string.
     """
-    # Load static files
-    soul = load_prompt_file("soul.md")
-    identity = load_prompt_file("identity.md")
+    # Persona (soul + identity) is shared across all goals — single source of truth.
+    from prompts.persona import soul_and_identity
+    persona = soul_and_identity()
+
+    # Goal-specific files
     tools = load_prompt_file("tools.md")
     user = load_prompt_file("user.md")
-
-    # Inject env vars into identity and user
-    identity = inject_env_vars(identity)
     user = inject_env_vars(user)
 
     # Build memory section (dynamic from DB)
@@ -222,8 +247,8 @@ def assemble_description(db: Optional[ScreenMapDB] = None) -> str:
         memory = load_prompt_file("memory.md")
         memory = "<!-- DB not available — using template -->\n" + memory
 
-    # Assemble in order: soul → identity → tools → memory → user
-    sections = [soul, identity, tools, memory, user]
+    # Assemble in order: shared persona → tools → memory → user
+    sections = [persona, tools, memory, user]
     return "\n\n---\n\n".join(sections)
 
 
@@ -231,18 +256,27 @@ def build_starter_prompt() -> str:
     """Build the starter prompt shown when the agent first greets the user."""
     email = os.getenv("TEST_EMAIL", "not configured")
     password_status = "configured" if os.getenv("TEST_PASSWORD") else "not configured"
+    build_env = (os.getenv("BUILD_ENV", "dev") or "dev").strip().lower()
+    default_otp = (os.getenv("DEFAULT_OTP", "") or "").strip()
+    auto_otp_active = build_env in {"dev", "test"} and bool(default_otp)
+    otp_note = (
+        f"OTP: auto-using `{default_otp}` (BUILD_ENV={build_env})."
+        if auto_otp_active
+        else "OTP: I'll ask you when the SMS arrives."
+    )
 
     return (
         "Hello! I'm the **Slingo QA Agent (Android)**. I test Slingo Cash Eruption "
         "on the Fanatics Casino Android app via Appium.\n\n"
         "Here's what I can do:\n"
+        "- **Log in** (just say `login` — runs launch → login → OTP → confirm home)\n"
         "- **Run the full QA test** (launch → login → OTP → navigate → play → report)\n"
         "- **Take a screenshot** of the device\n"
         "- **Launch the casino app**\n"
         "- **Navigate** to Slingo Cash Eruption\n"
         "- **Play a round** (5 base spins, handle wilds, exit safely, report balance)\n\n"
         f"Test credentials: email={email}, password={password_status}\n"
-        "Note: I'll ask you for the OTP code when it's sent via SMS.\n\n"
+        f"{otp_note}\n\n"
         "What would you like to do?"
     )
 

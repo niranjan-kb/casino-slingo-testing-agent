@@ -7,7 +7,7 @@ from temporalio.exceptions import ActivityError
 
 from models.data_types import ConversationHistory, ToolPromptInput
 from models.tool_definitions import AgentGoal, ToolDefinition
-from prompts.agent_prompt_generators import (
+from prompt_engine.agent_prompt_generators import (
     generate_missing_args_prompt,
     generate_tool_completion_prompt,
 )
@@ -44,6 +44,7 @@ async def handle_tool_execution(
     add_message_callback: callable,
     prompt_queue: Deque[str],
     goal: AgentGoal = None,
+    multi_goal_mode: bool = False,
 ) -> None:
     """Execute a tool after confirmation and handle its result."""
     workflow.logger.info(f"Confirmed. Proceeding with tool: {current_tool}")
@@ -101,7 +102,9 @@ async def handle_tool_execution(
         dynamic_result = {"error": str(e), "tool": current_tool}
 
     add_message_callback("tool_result", dynamic_result)
-    prompt_queue.append(generate_tool_completion_prompt(current_tool, dynamic_result))
+    prompt_queue.append(
+        generate_tool_completion_prompt(current_tool, dynamic_result, multi_goal_mode)
+    )
 
 
 async def handle_missing_args(

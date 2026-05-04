@@ -19,7 +19,6 @@ print(f"Agent goal: {os.environ['AGENT_GOAL']}")
 # Imports after env setup so shared.config reads the correct TEMPORAL_TASK_QUEUE
 from temporalio.worker import Worker  # noqa: E402
 
-from activities.perception_activities import PerceptionActivities  # noqa: E402
 from activities.tool_activities import (  # noqa: E402
     ToolActivities,
     dynamic_tool_activity,
@@ -29,12 +28,30 @@ from activities.tool_activities import (  # noqa: E402
 from shared.config import TEMPORAL_TASK_QUEUE, get_temporal_client  # noqa: E402
 from shared.mcp_client_manager import MCPClientManager  # noqa: E402
 from shared.screen_map_db import ScreenMapDB  # noqa: E402
+from tools.slingo_qa._deps import set_mcp_manager, set_screen_db  # noqa: E402
 from workflows.agent_goal_workflow import AgentGoalWorkflow  # noqa: E402
 
 
 async def main():
     llm_model = os.environ.get("LLM_MODEL", "openai/gpt-4o")
     print(f"Worker will use LLM model: {llm_model}")
+
+    # Resolve ANDROID_SERIAL from running adb devices (last-used, else first).
+    # Skip if the user pinned one explicitly via env.
+    if not os.getenv("ANDROID_SERIAL"):
+        from shared.device_picker import list_online_devices, pick_android_device
+
+        online = list_online_devices()
+        chosen = pick_android_device()
+        if chosen:
+            os.environ["ANDROID_SERIAL"] = chosen
+            others = [s for s in online if s != chosen]
+            extra = f" (also online: {', '.join(others)})" if others else ""
+            print(f"Android device: {chosen}{extra}")
+        else:
+            print("WARNING: no online adb devices found — falling back to default 'emulator-5554'")
+    else:
+        print(f"Android device: {os.environ['ANDROID_SERIAL']} (from env)")
 
     # Initialize screen map DB (self-improving coordinate storage)
     screen_db = ScreenMapDB()
@@ -66,9 +83,13 @@ async def main():
             print(f"WARNING: Failed to start persistent MCP connection: {e}")
             print("Falling back to ephemeral connections (sessions won't persist)")
 
+    # Inject shared resources into Slingo QA tools
+    set_screen_db(screen_db)
+    set_mcp_manager(mcp_client_manager)
+    print("Slingo QA tools: ScreenMapDB and MCPClientManager injected")
+
     client = await get_temporal_client()
     activities = ToolActivities(mcp_client_manager)
-    perception = PerceptionActivities(screen_db)
 
     print("Android worker ready to process tasks!")
     logging.basicConfig(level=logging.INFO)
@@ -84,10 +105,6 @@ async def main():
                     activities.agent_toolPlanner,
                     activities.get_wf_env_vars,
                     activities.mcp_tool_activity,
-                    perception.detect_screen,
-                    perception.lookup_coords,
-                    perception.locate_element_vision,
-                    perception.verify_tap,
                     dynamic_tool_activity,
                     mcp_list_tools,
                 ],

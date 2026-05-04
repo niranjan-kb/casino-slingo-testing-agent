@@ -10,7 +10,6 @@ from models.data_types import (
     EnvLookupInput,
     EnvLookupOutput,
     NextStep,
-    ValidationInput,
 )
 from models.tool_definitions import AgentGoal
 from workflows import workflow_helpers as helpers
@@ -24,7 +23,7 @@ with workflow.unsafe.imports_passed_through():
     from activities.tool_activities import ToolActivities, mcp_list_tools
     from goals import goal_list
     from models.data_types import CombinedInput, ToolPromptInput
-    from prompts.agent_prompt_generators import generate_genai_prompt
+    from prompt_engine.agent_prompt_generators import generate_genai_prompt
     from tools.tool_registry import create_mcp_tool_definitions
 
 # Constants
@@ -37,7 +36,7 @@ class ToolData(TypedDict, total=False):
     tool: str
     args: Dict[str, Any]
     response: str
-    force_confirm: bool = True
+    force_confirm: bool  # default applied at write site, not in TypedDict
 
 
 @workflow.defn
@@ -62,6 +61,11 @@ class AgentGoalWorkflow:
             False  # set from env file in activity lookup_wf_env_settings
         )
         self.mcp_tools_info: Optional[dict] = None  # stores complete MCP tools result
+        # Tool-result count at the moment we last switched goals.
+        # Used to guard against an LLM that emits `pick-new-goal` immediately
+        # after a `ChangeGoal` switch, before any of the new goal's phases
+        # have actually executed.
+        self.tool_results_count_at_last_goal_change: int = 0
 
     # see ../api/main.py#temporal_client.start_workflow() for how the input parameters are set
     @workflow.run
@@ -117,35 +121,13 @@ class AgentGoalWorkflow:
                     f"workflow step: processing message on the prompt queue, message is {prompt}"
                 )
 
-                # Validate user-provided prompts
+                # Record user-provided prompts.
+                # Validator (agent_validatePrompt) is ARCHIVED as of 2026-04-29 —
+                # adds an LLM round-trip per user message for low ROI.
+                # The toolPlanner LLM handles off-topic input via next='question'.
+                # Re-enable by restoring the agent_validatePrompt call here.
                 if self.is_user_prompt(prompt):
                     self.add_message("user", prompt)
-
-                    # Validate the prompt before proceeding
-                    validation_input = ValidationInput(
-                        prompt=prompt,
-                        conversation_history=self.conversation_history,
-                        agent_goal=self.goal,
-                    )
-                    validation_result = await workflow.execute_activity_method(
-                        ToolActivities.agent_validatePrompt,
-                        args=[validation_input],
-                        schedule_to_close_timeout=LLM_ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT,
-                        start_to_close_timeout=LLM_ACTIVITY_START_TO_CLOSE_TIMEOUT,
-                        retry_policy=RetryPolicy(
-                            initial_interval=timedelta(seconds=5), backoff_coefficient=1
-                        ),
-                    )
-
-                    # If validation fails, provide that feedback to the user - i.e., "your words make no sense, puny human" end this iteration of processing
-                    if not validation_result.validationResult:
-                        workflow.logger.warning(
-                            f"Prompt validation failed: {validation_result.validationFailedReason}"
-                        )
-                        self.add_message(
-                            "agent", validation_result.validationFailedReason
-                        )
-                        continue
 
                 # If valid, proceed with generating the context and prompt
                 context_instructions = generate_genai_prompt(
@@ -156,8 +138,19 @@ class AgentGoalWorkflow:
                     mcp_tools_info=self.mcp_tools_info,
                 )
 
+                # Build the per-call enum of valid tool names so the model
+                # cannot hallucinate (see plan_next_action enum constraint).
+                allowed_tool_names = sorted({tool.name for tool in self.goal.tools})
+                if self.mcp_tools_info and self.mcp_tools_info.get("success"):
+                    allowed_tool_names = sorted(
+                        set(allowed_tool_names)
+                        | set((self.mcp_tools_info.get("tools") or {}).keys())
+                    )
+
                 prompt_input = ToolPromptInput(
-                    prompt=prompt, context_instructions=context_instructions
+                    prompt=prompt,
+                    context_instructions=context_instructions,
+                    allowed_tool_names=allowed_tool_names,
                 )
 
                 # connect to LLM and execute to get next steps
@@ -202,8 +195,30 @@ class AgentGoalWorkflow:
                         self.confirmed = True
                 # else if the next step is to pick a new goal, set that to be the goal
                 elif next_step == "pick-new-goal":
-                    workflow.logger.info("All steps completed. Resetting goal.")
-                    self.change_goal("goal_choose_agent_type")
+                    # Guard: reject pick-new-goal if no tools from the current
+                    # goal have run since the last switch. The LLM occasionally
+                    # emits pick-new-goal right after ChangeGoal lands ("yay, I
+                    # switched!"), which is wrong — the new goal's phases have
+                    # not yet started.
+                    progress = (
+                        len(self.tool_results)
+                        - self.tool_results_count_at_last_goal_change
+                    )
+                    if progress < 1 and self.goal.id != "goal_choose_agent_type":
+                        workflow.logger.warning(
+                            f"Suppressing pick-new-goal: 0 tools from {self.goal.id} "
+                            f"have run since switch. Re-prompting LLM to start the "
+                            f"goal's phases instead."
+                        )
+                        self.prompt_queue.append(
+                            "### Correction: do NOT emit `pick-new-goal` yet. You just "
+                            "switched into this goal and have not run any of its phases. "
+                            "Read the goal description's first phase and emit "
+                            "`next='confirm'` with that phase's tool."
+                        )
+                    else:
+                        workflow.logger.info("All steps completed. Resetting goal.")
+                        self.change_goal("goal_choose_agent_type")
 
                 # else if the next step is to be done with the conversation such as if the user requests it via asking to "end conversation"
                 elif next_step == "done":
@@ -303,17 +318,28 @@ class AgentGoalWorkflow:
         """Change the goal (usually on request of the user).
 
         Args:
-            goal: goal to change to)
+            goal: goal id to change to (e.g. 'goal_login')
         """
-        if goal is not None:
-            for listed_goal in goal_list:
-                if listed_goal.id == goal:
-                    self.goal = listed_goal
-                    workflow.logger.info("Changed goal to " + goal)
-            if goal is None:
-                workflow.logger.warning(
-                    "Goal not set after goal reset, probably bad."
-                )  # if this happens, there's probably a problem with the goal list
+        if not goal:
+            workflow.logger.warning("change_goal called with empty/None goal id")
+            return
+
+        for listed_goal in goal_list:
+            if listed_goal.id == goal:
+                self.goal = listed_goal
+                # Snapshot tool-result count so we can detect "the LLM emitted
+                # pick-new-goal but didn't actually run any of the new goal's
+                # phases" (see the pick-new-goal handler in run()).
+                self.tool_results_count_at_last_goal_change = len(self.tool_results)
+                workflow.logger.info(
+                    f"Changed goal to {goal} "
+                    f"(tool_results_at_switch={self.tool_results_count_at_last_goal_change})"
+                )
+                return
+
+        workflow.logger.warning(
+            f"change_goal: '{goal}' not found in goal_list; current goal unchanged"
+        )
 
     # workflow function that defines if chat should end
     def chat_should_end(self) -> bool:
@@ -377,6 +403,7 @@ class AgentGoalWorkflow:
             self.add_message,
             self.prompt_queue,
             self.goal,
+            self.multi_goal_mode,
         )
 
         # set new goal if we should

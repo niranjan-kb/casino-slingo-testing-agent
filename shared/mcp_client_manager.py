@@ -6,12 +6,16 @@ from typing import Any, Dict, Optional, Tuple
 from models.tool_definitions import MCPServerDefinition
 
 # Import MCP client libraries
+# appium-mcp runs FastMCP's httpStream transport, which is MCP Streamable HTTP,
+# not legacy SSE — even though the endpoint path is /sse. Using sse_client here
+# causes the connection to flap (FastMCP closes it after a few capability-probe
+# attempts), so every tool call hits a ClosedResourceError.
 try:
     from mcp import ClientSession
-    from mcp.client.sse import sse_client
+    from mcp.client.streamable_http import streamablehttp_client
 except ImportError:
     ClientSession = None
-    sse_client = None
+    streamablehttp_client = None
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +65,7 @@ class MCPClientManager:
 
         while True:
             try:
-                async with sse_client(sse_url) as (read, write):
+                async with streamablehttp_client(sse_url) as (read, write, _get_session_id):
                     async with ClientSession(read, write) as session:
                         await session.initialize()
                         logger.info("MCP session initialized in background task")
