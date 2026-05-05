@@ -2,15 +2,6 @@
 
 Your job: launch the app, dismiss any pre-login modals, complete the Fanatics ONE 2-step login (email → password → OTP), and confirm a logged-in home/lobby screen. Then stop. Do not navigate further.
 
-## Live env values (injected per run)
-
-- `BUILD_ENV` = `{{BUILD_ENV}}`
-- `APP_PACKAGE` = `{{APP_PACKAGE}}`
-- `TEST_EMAIL` = `{{TEST_EMAIL}}`
-- `TEST_PASSWORD` = `{{TEST_PASSWORD}}` ← use this EXACTLY, do NOT make one up
-- `DEFAULT_OTP` = `{{DEFAULT_OTP}}`
-- OTP policy → **{{OTP_POLICY}}**
-
 ## Phases (run in order, stop on the first failure that exhausts recovery)
 
 ### Phase 0 — Device + session
@@ -102,9 +93,7 @@ Your job: launch the app, dismiss any pre-login modals, complete the Fanatics ON
 #### 2e — OTP
 
 1. Detect: text contains `One time passcode` or EditText `resource-id="mfa code text"`.
-2. **OTP source — follow the OTP policy**:
-   - `AUTO-OTP` mode → use `{{DEFAULT_OTP}}` directly. **Do NOT ask the user.**
-   - `ASK-USER-OTP` mode → set `next='question'` with prompt: "Please enter the OTP sent via SMS."
+2. **OTP source — follow the OTP policy from Identity**: `AUTO-OTP` → use `{{DEFAULT_OTP}}` directly. `ASK-USER-OTP` → `next='question'` with prompt: "Please enter the OTP sent via SMS."
 3. `FindElementWithFallback` candidates:
    ```json
    [{"strategy": "xpath", "selector": "//android.widget.EditText[@resource-id='mfa code text']"},
@@ -112,7 +101,7 @@ Your job: launch the app, dismiss any pre-login modals, complete the Fanatics ON
     {"strategy": "xpath", "selector": "(//android.widget.EditText)[1]"}]
    ```
 4. `appium_click` elementUUID=(returned)
-5. `appium_set_value` elementUUID=(same) text=`{{DEFAULT_OTP}}` (always quoted as a STRING — the dispatcher preserves it).
+5. `appium_set_value` elementUUID=(same) text=`{{DEFAULT_OTP}}` (always quoted as a STRING).
 6. `FindElementWithFallback` for the submit button:
    ```json
    [{"strategy": "xpath", "selector": "//*[@text='Done']"},
@@ -132,11 +121,3 @@ Your job: launch the app, dismiss any pre-login modals, complete the Fanatics ON
 3. If confirmed → respond `next='done'` with a short success report:
    - `LOGIN PASS — email=<email> | balance=<balance> | platform=<platform> | build=<build_env> | resolution=<W x H>`
 4. If NOT confirmed within 8s of submit → `SaveEvidence(label="login_unverified")` and STOP.
-
-## Self-healing reminders (from soul)
-
-- On any tool error, try the next selector strategy on the list. Don't repeat the failing one.
-- If `appium_find_element` misses, dump `appium_get_page_source` ONCE and read it before the next find.
-- `appium_click` requires `elementUUID` (not `elementId` — that's just the result text label). `appium_set_value` requires `text` (not `value`).
-- Never set `next='question'` for routine recovery. The only sanctioned question is OTP under `ASK-USER-OTP`.
-- Numeric strings (OTP, etc.) are typed as strings, never numbers — the dispatcher preserves string-only keys (`text`, `selector`, `strategy`, `elementUUID`, `id`, `key`, `action`, `app_context`, etc.).

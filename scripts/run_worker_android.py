@@ -19,12 +19,18 @@ print(f"Agent goal: {os.environ['AGENT_GOAL']}")
 # Imports after env setup so shared.config reads the correct TEMPORAL_TASK_QUEUE
 from temporalio.worker import Worker  # noqa: E402
 
+from activities.observer_activity import (  # noqa: E402
+    run_observers,
+    set_persona as set_observer_persona,
+    set_screen_db as set_observer_screen_db,
+)
 from activities.tool_activities import (  # noqa: E402
     ToolActivities,
     dynamic_tool_activity,
     mcp_list_tools,
     set_persistent_mcp_manager,
 )
+from observers.persona import load_persona_dials  # noqa: E402
 from shared.config import TEMPORAL_TASK_QUEUE, get_temporal_client  # noqa: E402
 from shared.mcp_client_manager import MCPClientManager  # noqa: E402
 from shared.screen_map_db import ScreenMapDB  # noqa: E402
@@ -88,6 +94,18 @@ async def main():
     set_mcp_manager(mcp_client_manager)
     print("Slingo QA tools: ScreenMapDB and MCPClientManager injected")
 
+    # Observer framework wiring (specs/003-observer-framework). Loads persona
+    # dials once per worker start and injects them + the screen_db into the
+    # run_observers activity's module-level state.
+    persona_dials = load_persona_dials()
+    set_observer_screen_db(screen_db)
+    set_observer_persona(persona_dials.view())
+    print(
+        f"Observer framework: persona curiosity={persona_dials.curiosity}, "
+        f"jackpot_optin={persona_dials.jackpot_optin}, "
+        f"max_loss=${persona_dials.max_session_loss_usd}"
+    )
+
     client = await get_temporal_client()
     activities = ToolActivities(mcp_client_manager)
 
@@ -107,6 +125,7 @@ async def main():
                     activities.mcp_tool_activity,
                     dynamic_tool_activity,
                     mcp_list_tools,
+                    run_observers,
                 ],
                 activity_executor=activity_executor,
             )

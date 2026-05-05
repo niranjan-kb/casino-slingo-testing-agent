@@ -6,7 +6,6 @@ platforms (Android, iOS, web) — platform/build differences live in the screen-
 
 from goals.login.prompt_loader import (
     assemble_description,
-    build_example_conversation,
     build_starter_prompt,
 )
 from models.tool_definitions import AgentGoal
@@ -70,7 +69,7 @@ goal_login = AgentGoal(
     ),
     description=assemble_description(),
     starter_prompt=build_starter_prompt(),
-    example_conversation_history=build_example_conversation(),
+    example_conversation_history="",
 )
 
 

@@ -6,6 +6,7 @@ Supports cross-device fallback (use closest resolution when current device has n
 Records observations for debugging and learning.
 """
 
+import json
 import os
 import sqlite3
 import threading
@@ -360,8 +361,255 @@ class ScreenMapDB:
             "devices": conn.execute("SELECT COUNT(*) FROM device_profiles").fetchone()[0],
             "elements": conn.execute("SELECT COUNT(*) FROM screen_elements").fetchone()[0],
             "signatures": conn.execute("SELECT COUNT(*) FROM screen_signatures").fetchone()[0],
+            "transitions": conn.execute("SELECT COUNT(*) FROM screen_transitions").fetchone()[0],
+            "games": conn.execute("SELECT COUNT(*) FROM game_catalog").fetchone()[0],
             "observations": conn.execute("SELECT COUNT(*) FROM run_observations").fetchone()[0],
+            "observer_observations": conn.execute(
+                "SELECT COUNT(*) FROM observation_log"
+            ).fetchone()[0],
         }
+
+    # ── Screen Transitions (the navigation graph) ────────────────────
+    #
+    # screen_transitions records "from screen A, doing X, lands on screen B".
+    # Used by shared/screen_graph.py to plan paths between screens. Seeded
+    # initially for known flows (login); populated by runtime observation
+    # via record_transition_observation as the agent verifies new edges.
+
+    def upsert_transition(
+        self,
+        from_screen: str,
+        intent_verb: str,
+        to_screen: str,
+        *,
+        intent_target: Optional[str] = None,
+        intent_args: Optional[Dict[str, Any]] = None,
+        app_context: str = "platform",
+        confidence: float = 0.5,
+        source: str = "seed",
+    ) -> None:
+        """Insert or update a transition row. Used by the seed script."""
+        args_json = json.dumps(intent_args) if intent_args else None
+        conn = self._get_conn()
+        conn.execute(
+            """INSERT INTO screen_transitions
+                   (from_screen, intent_verb, intent_target, intent_args_json,
+                    to_screen, app_context, confidence, source, last_verified)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(from_screen, intent_verb, intent_target, to_screen, app_context)
+               DO UPDATE SET
+                   confidence = excluded.confidence,
+                   source = excluded.source,
+                   intent_args_json = COALESCE(excluded.intent_args_json, intent_args_json),
+                   last_verified = excluded.last_verified""",
+            (from_screen, intent_verb, intent_target, args_json,
+             to_screen, app_context, confidence, source,
+             datetime.utcnow().isoformat()),
+        )
+        conn.commit()
+
+    def record_transition_observation(
+        self,
+        from_screen: str,
+        intent_verb: str,
+        to_screen: str,
+        *,
+        intent_target: Optional[str] = None,
+        intent_args: Optional[Dict[str, Any]] = None,
+        success: bool = True,
+        app_context: str = "platform",
+    ) -> None:
+        """Record a runtime observation of a transition. Bumps confidence on success."""
+        args_json = json.dumps(intent_args) if intent_args else None
+        conn = self._get_conn()
+        # Ensure the row exists (zero-confidence floor for first-seen).
+        conn.execute(
+            """INSERT OR IGNORE INTO screen_transitions
+                   (from_screen, intent_verb, intent_target, intent_args_json,
+                    to_screen, app_context, confidence, source, last_verified)
+               VALUES (?, ?, ?, ?, ?, ?, 0.0, 'observed', ?)""",
+            (from_screen, intent_verb, intent_target, args_json,
+             to_screen, app_context, datetime.utcnow().isoformat()),
+        )
+        # SQLite needs the IS-NULL trick for the intent_target match; we
+        # collapse it via COALESCE into a sentinel string for comparison.
+        conn.execute(
+            """UPDATE screen_transitions
+               SET times_used = times_used + 1,
+                   times_succeeded = times_succeeded + ?,
+                   confidence = CAST(times_succeeded + ? AS REAL) / (times_used + 1),
+                   last_verified = ?
+               WHERE from_screen = ?
+                 AND intent_verb = ?
+                 AND COALESCE(intent_target, '') = COALESCE(?, '')
+                 AND to_screen = ?
+                 AND app_context = ?""",
+            (int(success), int(success), datetime.utcnow().isoformat(),
+             from_screen, intent_verb, intent_target, to_screen, app_context),
+        )
+        conn.commit()
+
+    def get_transitions_from(
+        self,
+        from_screen: str,
+        *,
+        app_context: str = "platform",
+    ) -> List[Dict[str, Any]]:
+        """All known transitions out of a screen, ordered by confidence."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            """SELECT * FROM screen_transitions
+               WHERE from_screen = ? AND app_context = ?
+               ORDER BY confidence DESC, times_succeeded DESC""",
+            (from_screen, app_context),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_transitions_to(
+        self,
+        to_screen: str,
+        *,
+        app_context: str = "platform",
+    ) -> List[Dict[str, Any]]:
+        """All known transitions that LAND on a screen — useful for reverse-planning."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            """SELECT * FROM screen_transitions
+               WHERE to_screen = ? AND app_context = ?
+               ORDER BY confidence DESC""",
+            (to_screen, app_context),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # ── Game Catalog (the agent's memory of games it has played) ─────
+
+    def upsert_game(
+        self,
+        slug: str,
+        name: str,
+        *,
+        category: Optional[str] = None,
+        provider: Optional[str] = None,
+        loaded_signature: Optional[str] = None,
+        min_bet_usd: Optional[float] = None,
+        max_bet_usd: Optional[float] = None,
+        play_loop: Optional[Dict[str, Any]] = None,
+        confidence: Optional[float] = None,
+    ) -> None:
+        play_loop_json = json.dumps(play_loop) if play_loop else None
+        conn = self._get_conn()
+        conn.execute(
+            """INSERT INTO game_catalog
+                   (slug, name, category, provider, loaded_signature,
+                    min_bet_usd, max_bet_usd, play_loop_json, last_seen, confidence)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(slug) DO UPDATE SET
+                   name = COALESCE(excluded.name, name),
+                   category = COALESCE(excluded.category, category),
+                   provider = COALESCE(excluded.provider, provider),
+                   loaded_signature = COALESCE(excluded.loaded_signature, loaded_signature),
+                   min_bet_usd = COALESCE(excluded.min_bet_usd, min_bet_usd),
+                   max_bet_usd = COALESCE(excluded.max_bet_usd, max_bet_usd),
+                   play_loop_json = COALESCE(excluded.play_loop_json, play_loop_json),
+                   last_seen = excluded.last_seen,
+                   confidence = COALESCE(excluded.confidence, confidence)""",
+            (slug, name, category, provider, loaded_signature,
+             min_bet_usd, max_bet_usd, play_loop_json,
+             datetime.utcnow().isoformat(), confidence),
+        )
+        conn.commit()
+
+    def find_games(
+        self,
+        *,
+        category: Optional[str] = None,
+        name_like: Optional[str] = None,
+        slug: Optional[str] = None,
+        limit: int = 10,
+    ) -> List[Dict[str, Any]]:
+        conn = self._get_conn()
+        query = "SELECT * FROM game_catalog WHERE 1=1"
+        params: list = []
+        if slug:
+            query += " AND slug = ?"
+            params.append(slug)
+        if category:
+            query += " AND category = ?"
+            params.append(category)
+        if name_like:
+            query += " AND name LIKE ?"
+            params.append(f"%{name_like}%")
+        query += " ORDER BY confidence DESC, last_seen DESC LIMIT ?"
+        params.append(limit)
+        rows = conn.execute(query, params).fetchall()
+        return [dict(r) for r in rows]
+
+    # ── Observer Framework Observations ──────────────────────────────
+    #
+    # observation_log is the durable ledger for the observer framework
+    # (FR-018). Distinct from run_observations above, which records
+    # per-tap diagnostic data. Each row is one ObservationResult emitted
+    # by an observer engine; queryable by run_id, observer_id, severity.
+
+    def log_observer_observation(
+        self,
+        observer_id: str,
+        *,
+        run_id: Optional[str] = None,
+        goal_id: Optional[str] = None,
+        severity: str = "info",
+        pass_fail: str = "n/a",
+        matched: bool = False,
+        auto_handle: bool = False,
+        summary: Optional[str] = None,
+        evidence_path: Optional[str] = None,
+        spec_link: Optional[str] = None,
+        failed_rule: Optional[str] = None,
+        captured_json: Optional[str] = None,
+        sub_flow_json: Optional[str] = None,
+        screen_signature: Optional[str] = None,
+        screen_id: Optional[str] = None,
+    ) -> int:
+        """Persist one ObservationResult. Returns new row id."""
+        conn = self._get_conn()
+        cursor = conn.execute(
+            """INSERT INTO observation_log
+                   (run_id, goal_id, observer_id, severity, pass_fail, matched,
+                    auto_handle, summary, evidence_path, spec_link, failed_rule,
+                    captured_json, sub_flow_json, screen_signature, screen_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (run_id, goal_id, observer_id, severity, pass_fail, int(matched),
+             int(auto_handle), summary, evidence_path, spec_link, failed_rule,
+             captured_json, sub_flow_json, screen_signature, screen_id),
+        )
+        conn.commit()
+        return cursor.lastrowid
+
+    def get_recent_observer_observations(
+        self,
+        *,
+        run_id: Optional[str] = None,
+        observer_id: Optional[str] = None,
+        severity: Optional[str] = None,
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        """Read observer-framework observations, optionally filtered."""
+        conn = self._get_conn()
+        query = "SELECT * FROM observation_log WHERE 1=1"
+        params: list = []
+        if run_id:
+            query += " AND run_id = ?"
+            params.append(run_id)
+        if observer_id:
+            query += " AND observer_id = ?"
+            params.append(observer_id)
+        if severity:
+            query += " AND severity = ?"
+            params.append(severity)
+        query += " ORDER BY timestamp DESC LIMIT ?"
+        params.append(limit)
+        rows = conn.execute(query, params).fetchall()
+        return [dict(r) for r in rows]
 
     def should_verify_tap(
         self,
@@ -483,4 +731,69 @@ CREATE INDEX IF NOT EXISTS idx_observations_device_screen
 
 CREATE INDEX IF NOT EXISTS idx_signatures_screen
     ON screen_signatures(screen_name, app_context);
+
+CREATE TABLE IF NOT EXISTS screen_transitions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    from_screen TEXT NOT NULL,                       -- screen_signatures.screen_name
+    intent_verb TEXT NOT NULL,                       -- 'launch' | 'tap' | 'fill_and_continue' | ...
+    intent_target TEXT,                              -- element_name for taps, field name for fills
+    intent_args_json TEXT,                           -- extra args (text-to-type, key, package)
+    to_screen TEXT NOT NULL,                         -- screen_name landed on
+    app_context TEXT NOT NULL DEFAULT 'platform',
+    confidence REAL DEFAULT 0.5,
+    times_used INTEGER DEFAULT 0,
+    times_succeeded INTEGER DEFAULT 0,
+    last_verified TIMESTAMP,
+    source TEXT DEFAULT 'observed',                  -- 'seed' | 'observed' | 'manual'
+    UNIQUE(from_screen, intent_verb, intent_target, to_screen, app_context)
+);
+
+CREATE INDEX IF NOT EXISTS idx_transitions_from
+    ON screen_transitions(from_screen, app_context);
+
+CREATE INDEX IF NOT EXISTS idx_transitions_to
+    ON screen_transitions(to_screen, app_context);
+
+CREATE TABLE IF NOT EXISTS game_catalog (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug TEXT NOT NULL UNIQUE,                       -- 'slingo_cash_eruption'
+    name TEXT NOT NULL,                              -- 'Slingo Cash Eruption'
+    category TEXT,                                   -- 'slingo' | 'slots' | 'live_dealer' | 'arcade'
+    provider TEXT,                                   -- 'gaming_realms' | 'igt' | ...
+    loaded_signature TEXT,                           -- screen_name of the loaded-game state
+    min_bet_usd REAL,
+    max_bet_usd REAL,
+    play_loop_json TEXT,                             -- per-game play strategy (deferred)
+    last_seen TIMESTAMP,
+    confidence REAL DEFAULT 0.5
+);
+
+CREATE INDEX IF NOT EXISTS idx_game_catalog_category
+    ON game_catalog(category);
+
+CREATE TABLE IF NOT EXISTS observation_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    run_id TEXT,                                     -- workflow run id
+    goal_id TEXT,                                    -- which goal was active
+    observer_id TEXT NOT NULL,                       -- e.g. obs.jackpot_icon
+    severity TEXT NOT NULL DEFAULT 'info',           -- info | warn | bug
+    pass_fail TEXT NOT NULL DEFAULT 'n/a',           -- pass | fail | n/a
+    matched INTEGER NOT NULL DEFAULT 0,
+    auto_handle INTEGER NOT NULL DEFAULT 0,
+    summary TEXT,
+    evidence_path TEXT,
+    spec_link TEXT,
+    failed_rule TEXT,
+    captured_json TEXT,                              -- captured trigger groups
+    sub_flow_json TEXT,                              -- queued/run sub_flow tools
+    screen_signature TEXT,
+    screen_id TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_observation_log_run
+    ON observation_log(run_id, timestamp);
+
+CREATE INDEX IF NOT EXISTS idx_observation_log_observer
+    ON observation_log(observer_id, severity);
 """

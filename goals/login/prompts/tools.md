@@ -69,12 +69,3 @@ Returns `{"found": true, "elementUUID": "00000000-...", "strategy": "xpath", "se
 - **Don't pass digits to `appium_mobile_press_key`.** It only accepts navigation keys.
 - **OTP / numeric codes are STRINGS.** Always emit them quoted: `"text": "864408"`. The dispatcher preserves strings on text-typed keys.
 
-## Wait times (seconds)
-
-| Transition | Seconds |
-|-----------|---------|
-| App launch / splash | 3 |
-| Modal dismiss | 2 |
-| Login submit / network round-trip | 3-4 |
-| OTP submit | 3-4 |
-| Generic tap | 1-2 |

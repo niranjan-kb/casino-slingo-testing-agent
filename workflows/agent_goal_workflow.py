@@ -20,6 +20,7 @@ from workflows.workflow_helpers import (
 )
 
 with workflow.unsafe.imports_passed_through():
+    from activities.observer_activity import run_observers
     from activities.tool_activities import ToolActivities, mcp_list_tools
     from goals import goal_list
     from models.data_types import CombinedInput, ToolPromptInput
@@ -66,6 +67,14 @@ class AgentGoalWorkflow:
         # after a `ChangeGoal` switch, before any of the new goal's phases
         # have actually executed.
         self.tool_results_count_at_last_goal_change: int = 0
+
+        # Observer framework state (specs/003-observer-framework). Phase 1
+        # populates observation_log via the run_observers activity firing
+        # after each tool result (FR-006, FR-018). pending_observations is
+        # reserved for sub-flow suggestions wired in phase 2+ (FR-013).
+        self.observation_log: List[Dict[str, Any]] = []
+        self.pending_observations: List[Dict[str, Any]] = []
+        self.seen_signatures: List[str] = []  # per-run novelty cache
 
     # see ../api/main.py#temporal_client.start_workflow() for how the input parameters are set
     @workflow.run
@@ -297,6 +306,53 @@ class AgentGoalWorkflow:
         """Query handler to retrieve the latest tool data response if available."""
         return self.tool_data
 
+    @workflow.query
+    def get_observation_log(self) -> List[Dict[str, Any]]:
+        """Query handler: every observer observation emitted in this run.
+
+        See specs/003-observer-framework/spec.md (FR-021). Returns [] in
+        phase 0 (registry empty); phase 1+ populates per-tick.
+        """
+        return list(self.observation_log)
+
+    @workflow.query
+    def get_pending_observations(self) -> List[Dict[str, Any]]:
+        """Query handler: observations queued for the next planner turn.
+
+        Cleared after each planner LLM call consumes them (phase 1+).
+        """
+        return list(self.pending_observations)
+
+    @workflow.query
+    def get_session_summary(self) -> Dict[str, Any]:
+        """Query handler: rolled-up session view for the React UI / GitHub bot.
+
+        Lists the goal, observer hits, max severity, and feature spec ids
+        verified so far. Phase 0 returns the goal id and empty rollups.
+        """
+        observer_hits: List[str] = []
+        feature_specs_verified: List[str] = []
+        severity_max = "info"
+        severity_rank = {"info": 0, "warn": 1, "bug": 2}
+        for obs in self.observation_log:
+            oid = obs.get("observer_id")
+            if oid and oid not in observer_hits:
+                observer_hits.append(oid)
+            spec = obs.get("spec_link")
+            if spec and spec not in feature_specs_verified:
+                feature_specs_verified.append(spec)
+            sev = obs.get("severity", "info")
+            if severity_rank.get(sev, 0) > severity_rank.get(severity_max, 0):
+                severity_max = sev
+        return {
+            "goal_id": getattr(self.goal, "id", None),
+            "observer_hits": observer_hits,
+            "severity_max": severity_max,
+            "feature_specs_verified": feature_specs_verified,
+            "observation_count": len(self.observation_log),
+            "pending_count": len(self.pending_observations),
+        }
+
     def add_message(self, actor: str, response: Union[str, Dict[str, Any]]) -> None:
         """Add a message to the conversation history.
 
@@ -419,7 +475,59 @@ class AgentGoalWorkflow:
                 and self.goal.id != "goal_choose_agent_type"
             ):
                 self.change_goal("goal_choose_agent_type")
+
+        # Observer framework tick (specs/003-observer-framework, FR-006).
+        # Per FR-027 this MUST NEVER halt the goal loop — any failure is
+        # caught here and the run continues. The activity itself also
+        # swallows internal failures; this is belt-and-suspenders.
+        await self._run_observer_tick(current_tool)
+
         return waiting_for_confirm
+
+    async def _run_observer_tick(self, current_tool: Optional[str]) -> None:
+        """Fire run_observers for the latest tool result. Never raises."""
+        try:
+            last_result: Dict[str, Any] = (
+                self.tool_results[-1] if self.tool_results else {}
+            )
+            if not isinstance(last_result, dict):
+                last_result = {"raw": str(last_result)}
+            last_args = (
+                self.tool_data.get("args", {}) if isinstance(self.tool_data, dict) else {}
+            )
+            last_success = bool(last_result.get("success", True))
+            last_error = last_result.get("error")
+            obs_payload = {
+                "run_id": workflow.info().run_id,
+                "goal_id": getattr(self.goal, "id", "") or "",
+                "last_tool_name": current_tool,
+                "last_tool_args": last_args,
+                "last_tool_result": last_result,
+                "last_tool_success": last_success,
+                "last_tool_error": last_error,
+                "seen_signatures": list(self.seen_signatures),
+            }
+            obs_out = await workflow.execute_activity(
+                run_observers,
+                obs_payload,
+                start_to_close_timeout=timedelta(seconds=15),
+                retry_policy=RetryPolicy(
+                    initial_interval=timedelta(seconds=2),
+                    maximum_attempts=2,
+                ),
+            )
+            new_obs = obs_out.get("observations") or []
+            if new_obs:
+                self.observation_log.extend(new_obs)
+                workflow.logger.info(
+                    f"observer tick: {len(new_obs)} observation(s) from tool={current_tool}"
+                )
+            new_sig = obs_out.get("new_signature")
+            if new_sig and new_sig not in self.seen_signatures:
+                self.seen_signatures.append(new_sig)
+        except Exception as e:                                          # noqa: BLE001
+            # FR-027: observer machinery must never halt the goal.
+            workflow.logger.warning(f"observer tick swallowed failure: {e}")
 
     # debugging helper - drop this in various places in the workflow to get status
     # also don't forget you can look at the workflow itself and do queries if you want
