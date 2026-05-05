@@ -1,4 +1,15 @@
 from .change_goal import change_goal
+from .slingo_qa import (
+    detect_screen,
+    find_element_with_fallback,
+    generate_report,
+    lookup_coords,
+    save_evidence,
+    smart_tap,
+    tap_coordinate,
+    verify_tap,
+    wait_seconds,
+)
 from .create_invoice import create_invoice
 from .ecommerce.get_order import get_order
 from .ecommerce.list_orders import list_orders
@@ -69,5 +80,24 @@ def get_handler(tool_name: str):
         return guess_location
     if tool_name == "AddToCart":
         return add_to_cart
+
+    if tool_name == "WaitSeconds":
+        return wait_seconds
+    if tool_name == "TapCoordinate":
+        return tap_coordinate
+    if tool_name == "DetectScreen":
+        return detect_screen
+    if tool_name == "FindElementWithFallback":
+        return find_element_with_fallback
+    if tool_name == "LookupCoords":
+        return lookup_coords
+    if tool_name == "VerifyTap":
+        return verify_tap
+    if tool_name == "SmartTap":
+        return smart_tap
+    if tool_name == "SaveEvidence":
+        return save_evidence
+    if tool_name == "GenerateReport":
+        return generate_report
 
     raise ValueError(f"Unknown tool: {tool_name}")

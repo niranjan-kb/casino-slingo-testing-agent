@@ -2,9 +2,11 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies and Node.js (needed for npx / mobile-mcp)
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends gcc build-essential curl && \
+    apt-get install -y --no-install-recommends gcc build-essential curl gnupg && \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y --no-install-recommends nodejs && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 

@@ -1,0 +1,55 @@
+{
+  "game": "slingo_cash_eruption",
+  "provider": "Gaming Realms",
+  "platform": "android",
+  "resolution": "1080x1920",
+  "note": "Physical pixel coordinates. WebView bounds: x 0-1080, y 300-1850. All in-game elements are inside WebView — appium_find_element cannot see them. Use appium_swipe(startX, startY, endX=startX, endY=startY) for coordinate taps.",
+  "webview_bounds": { "x_min": 0, "x_max": 1080, "y_min": 300, "y_max": 1850 },
+  "screens": {
+    "main_game": {
+      "grid": {
+        "note": "5x5 grid of numbers. Column x-values and row y-values below.",
+        "columns": { "1": 220, "2": 380, "3": 540, "4": 700, "5": 860 },
+        "rows": { "1": 730, "2": 890, "3": 1050, "4": 1210, "5": 1370 }
+      },
+      "reel": {
+        "note": "1x5 horizontal reel of symbols below the grid",
+        "y": 1550,
+        "slots": [220, 380, 540, 700, 860]
+      },
+      "controls": {
+        "spin_button": {
+          "x": 540,
+          "y": 1780,
+          "intent": "Start spin — large circular button at bottom center",
+          "type": "button"
+        },
+        "end_game_button": {
+          "x": 540,
+          "y": 1620,
+          "intent": "DO NOT TAP — touch target overlaps with spin button during extra spins phase",
+          "type": "button",
+          "notes": "DANGER: Use native header close_button instead. Never tap this coordinate."
+        },
+        "stake_adjuster": {
+          "x": 220,
+          "y": 1780,
+          "intent": "Open bet/stake adjustment menu",
+          "type": "button"
+        },
+        "settings_button": {
+          "x": 860,
+          "y": 1780,
+          "intent": "Open game settings",
+          "type": "button"
+        },
+        "game_over_dismiss": {
+          "x": 540,
+          "y": 1050,
+          "intent": "Dismiss Game Over modal by tapping center",
+          "type": "button"
+        }
+      }
+    }
+  }
+}

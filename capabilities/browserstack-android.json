@@ -1,0 +1,18 @@
+{
+  "platformName": "Android",
+  "appium:automationName": "UiAutomator2",
+  "appium:deviceName": "Samsung Galaxy S23",
+  "appium:platformVersion": "13.0",
+  "appium:app": "bs://<ANDROID_APP_ID>",
+  "appium:noReset": true,
+  "appium:newCommandTimeout": 300,
+  "bstack:options": {
+    "userName": "<BROWSERSTACK_USERNAME>",
+    "accessKey": "<BROWSERSTACK_ACCESS_KEY>",
+    "projectName": "Fanatics Casino QA",
+    "buildName": "casino-qa-android",
+    "sessionName": "Slingo QA Test",
+    "debug": true,
+    "networkLogs": true
+  }
+}

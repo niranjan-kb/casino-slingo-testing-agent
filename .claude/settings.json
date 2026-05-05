@@ -1,0 +1,6 @@
+{
+  "enabledPlugins": {
+    "claude-mem@thedotmack": true,
+    "skill-creator@claude-plugins-official": true
+  }
+}

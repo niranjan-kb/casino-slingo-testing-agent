@@ -25,6 +25,11 @@ NextStep = Literal["confirm", "question", "pick-new-goal", "done"]
 class ToolPromptInput:
     prompt: str
     context_instructions: str
+    # Names of every tool the agent is allowed to invoke. Used to constrain
+    # plan_next_action's `tool` field to a JSON Schema enum, so the model
+    # cannot hallucinate tool names like "ToolActivities.agent_toolPlanner".
+    # Passing None or [] means no enum is applied (free-form string).
+    allowed_tool_names: Optional[List[str]] = None
 
 
 @dataclass
