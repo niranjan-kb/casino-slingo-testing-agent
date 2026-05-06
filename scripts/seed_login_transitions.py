@@ -1,6 +1,6 @@
 """Seed the verified login flow as transitions in screen_map_db.
 
-This is the data form of goals/login/prompts/user.md's phase procedure.
+This is the data form of goals/casino_session/prompts/user.md's phase procedure.
 Each row says "from screen A, doing X lands on screen B" — exactly
 what the path planner walks. Once seeded, the agent can navigate
 app_launch → home without reading the procedural markdown.

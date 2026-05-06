@@ -12,14 +12,15 @@ asked for a game → log in → navigate the lobby → search/find the game → 
 
 Each phase is a discrete capability the agent composes at runtime. **One persona, three to four goals:**
 
-| Goal | What it does |
+| Layer | What it is |
 |---|---|
-| **`goal_login`** ✅ | Authenticate end-to-end: launch app → dismiss permission modals → Fanatics ONE 2-step (email → password → OTP) → confirm logged-in home. Platform-agnostic, locked. |
-| **`goal_navigate_to_game`** 🔜 | From logged-in home, find a named game (search bar, category browse, recent), open it, dismiss any pre-game prompts (FanCash, location), wait for WebView to load. |
-| **`goal_play_game`** 🔜 | Generic play loop parameterised by `game_name`: read starting balance → set stake → take N actions per the game's screen map → handle special states → safe exit. Per-game knowledge (Slingo wilds, blackjack hit/stand, etc.) lives in per-game configs, not per-goal code. |
-| **`goal_session_report`** ✅ writer ready | Write a markdown session report to `reports/YYYY-MM-DD-{game}-{run_id}.md` with bug list, balance ledger, observations, screen-map deltas. |
+| **`goal_casino_session`** ✅ | The session profile: tool list (Appium-MCP + screen-map DB tools), MCP server, starter prompt. One goal per workflow. Platform-agnostic; build/platform/resolution live in the screen-map DB. |
+| **`intent_authenticate`** ✅ | LLM's per-turn objective: launch app → dismiss permission modals → Fanatics ONE 2-step (email → password → OTP) → confirm logged-in home. Locked. |
+| **`intent_navigate_to_screen`** 🆕 | Per-turn objective: from any logged-in screen, reach a target screen (typically a game's loaded signature) via search / category / recents. |
+| **`intent_play_game`** 🆕 | Per-turn objective: generic spin/play loop driven by `game_catalog.play_loop_json`. No per-game code. |
+| **`intent_report`** 🆕 | Per-turn objective: write `reports/YYYY-MM-DD-<run>.md`. Session terminator. |
 
-The persona (SOUL) is shared across all of them — same voice, same principles, same self-healing behaviour. Goals are platform-agnostic capabilities; the platform / build / resolution lives in the screen-map DB.
+The persona (SOUL) is shared. The goal sets up infrastructure once; intents drive what the LLM is doing right now and can switch turn-to-turn.
 
 ## Why we test as a platform
 
@@ -96,7 +97,7 @@ Watch live in the Temporal UI: `http://localhost:8080`.
 uv run scripts/smoke_login.py --timeout 300
 ```
 
-Resets the app, runs `goal_login`, asserts `LOGIN PASS` lands within the timeout. Exits 0 on success.
+Resets the app, runs `goal_casino_session` against `intent_authenticate`, asserts `LOGIN PASS` lands within the timeout. Exits 0 on success.
 
 ### Configuration
 
@@ -104,7 +105,7 @@ Resets the app, runs `goal_login`, asserts `LOGIN PASS` lands within the timeout
 
 ```bash
 # Casino QA
-AGENT_GOAL=goal_login
+AGENT_GOAL=goal_casino_session
 TEMPORAL_TASK_QUEUE=casino-qa-android
 PLATFORM=android
 ANDROID_SERIAL=emulator-5554
@@ -125,7 +126,7 @@ TEST_PASSWORD=...
 
 ## Roadmap
 
-- **Phase 1** (now): goal_login locked, goal_navigate_to_game and goal_play_game in progress, single Slingo game on Android emulator
+- **Phase 1** (now): goal_casino_session + intent_authenticate locked; intent_navigate_to_screen and intent_play_game in progress; single Slingo game on Android emulator
 - **Phase 2**: Multi-game coverage (slots, blackjack, roulette), iOS support, proxyman-mcp for network validation, launchdarkly-mcp for feature-flag control
 - **Phase 3**: 100+ games, AWS Device Farm, CI/CD via Bitrise, web platform support
 

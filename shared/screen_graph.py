@@ -6,7 +6,7 @@ caller hands off to LLM reasoning (and the agent's eventual success will
 record a new transition that grows the graph).
 
 This module is the runtime counterpart to the seeded login flow markdown.
-The phase-by-phase procedure in goals/login/prompts/user.md becomes data
+The phase-by-phase procedure in goals/casino_session/prompts/user.md becomes data
 in screen_transitions; the agent walks the graph instead of reading prose.
 """
 

@@ -7,7 +7,7 @@ from temporalio.exceptions import ActivityError
 
 from models.data_types import ConversationHistory, ToolPromptInput
 from models.tool_definitions import AgentGoal, ToolDefinition
-from prompt_engine.agent_prompt_generators import (
+from prompts.generators import (
     generate_missing_args_prompt,
     generate_tool_completion_prompt,
 )

@@ -2,7 +2,7 @@
 
 Last updated: 2026-05-06
 
-> **Single source of truth** for AI coding assistants (Claude Code, Codex, Cursor, etc.) and humans. The runtime persona lives in [`prompts/persona/soul.md`](prompts/persona/soul.md), mirrored from the canonical [SOUL.md](../casino-game-player/SOUL.MD). The runtime topology diagram lives in [agent-harness.md](agent-harness.md).
+> **Single source of truth** for AI coding assistants (Claude Code, Codex, Cursor, etc.) and humans. The runtime persona lives in [`prompts/persona/soul.md`](prompts/persona/soul.md). The runtime topology diagram lives in [agent-harness.md](agent-harness.md).
 
 ## tl;dr for an AI editor
 
@@ -23,7 +23,7 @@ The persona (SOUL) is shared. The agent composes **intents** at runtime — the 
 | **`intent_play_game`** | Generic spin-loop driver. Per-game data lives in `game_catalog.play_loop_json` — no per-game code | 🆕 spec 004 |
 | **`intent_report`** | Write `reports/YYYY-MM-DD-<run>.md` (timeline, observations, transitions added). Session terminator. | 🆕 spec 004 |
 
-Goals (`goal_login`, etc.) still exist as the workflow's high-level configuration; intents are the per-turn decision unit. See [agent-harness.md](agent-harness.md) for the full diagram.
+A goal (`goal_casino_session`) is the workflow's session config — tool list + MCP server + starter prompt. An intent is the LLM's per-turn objective (declarative end-state, success check, guardrails). One goal per workflow; many intents over its lifetime. See [agent-harness.md](agent-harness.md) for the full diagram.
 
 ## Why Temporal
 

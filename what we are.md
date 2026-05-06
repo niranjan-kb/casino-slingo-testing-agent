@@ -56,7 +56,7 @@ Slingo is just the first game. The architecture should be:
 │       apply promo → play required games → verify terms   │
 │                                                          │
 │ INFRASTRUCTURE                                           │
-│  ├── screen_maps/ (per resolution)                       │
+│  ├── data/screen_map.db (learned per device/build)       │
 │  ├── mobile-mcp (device interaction)                     │
 │  ├── proxyman-mcp (network validation)                   │
 │  ├── launchdarkly-mcp (feature flags)                    │

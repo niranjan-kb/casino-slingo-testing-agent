@@ -25,7 +25,7 @@ with workflow.unsafe.imports_passed_through():
     from goals import goal_list
     from intents import load_registry as _load_intent_registry
     from models.data_types import CombinedInput, ToolPromptInput
-    from prompt_engine.agent_prompt_generators import generate_genai_prompt
+    from prompts.generators import generate_genai_prompt
     from tools.tool_registry import create_mcp_tool_definitions
 
 # Loaded once per worker process at module import (mirrors goal_list pattern).
@@ -474,7 +474,7 @@ class AgentGoalWorkflow:
         """Change the goal (usually on request of the user).
 
         Args:
-            goal: goal id to change to (e.g. 'goal_login')
+            goal: goal id to change to (e.g. 'goal_casino_session')
         """
         if not goal:
             workflow.logger.warning("change_goal called with empty/None goal id")

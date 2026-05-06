@@ -1,4 +1,4 @@
-"""Loader for goal_login — composes shared persona + login-specific user/tools."""
+"""Loader for goal_casino_session — composes shared persona + session-specific user/tools."""
 
 import os
 
@@ -32,7 +32,7 @@ def build_starter_prompt() -> str:
         else "OTP: I'll ask you when the SMS arrives."
     )
     return (
-        "Hello — I'm the **Casino QA Agent**, currently scoped to **goal_login**.\n\n"
+        "Hello — I'm the **Casino QA Agent**, running a **goal_casino_session**.\n\n"
         "I'll authenticate the casino app end-to-end: launch → dismiss pre-login modals → "
         "Fanatics ONE 2-step (email → password) → OTP → confirm home.\n\n"
         f"Email: `{env['TEST_EMAIL']}` | Password: configured | Build: `{env['BUILD_ENV']}` | "

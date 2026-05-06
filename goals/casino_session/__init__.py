@@ -1,10 +1,12 @@
-"""goal_login — platform-agnostic capability goal.
+"""goal_casino_session — platform-agnostic casino session profile.
 
-Authenticates the casino app and confirms a logged-in home/lobby. Reused across
-platforms (Android, iOS, web) — platform/build differences live in the screen-map DB.
+Configures the toolset (Appium-MCP + screen-map DB tools) for any casino-app
+intent: authenticate, navigate to a game, play, report. The per-turn objective
+is driven by the intent registry; this module is the session's tool/MCP config.
+Platform/build differences live in the screen-map DB, not in the goal name.
 """
 
-from goals.login.prompt_loader import (
+from goals.casino_session.prompt_loader import (
     assemble_description,
     build_starter_prompt,
 )
@@ -22,8 +24,7 @@ from tools.tool_registry import (
 )
 
 
-# Appium-MCP tools needed for login (subset — no game-specific tools)
-_LOGIN_APPIUM_TOOLS = [
+_CASINO_SESSION_APPIUM_TOOLS = [
     "appium_screenshot",
     "appium_click",
     "appium_set_value",
@@ -39,8 +40,7 @@ _LOGIN_APPIUM_TOOLS = [
     "select_device",
 ]
 
-# Local tools — only what login needs (no GenerateReport — login isn't the QA report owner)
-_LOGIN_LOCAL_TOOLS = [
+_CASINO_SESSION_LOCAL_TOOLS = [
     slingo_smart_tap_tool,
     slingo_find_element_with_fallback_tool,
     slingo_wait_seconds_tool,
@@ -52,20 +52,21 @@ _LOGIN_LOCAL_TOOLS = [
 ]
 
 
-goal_login = AgentGoal(
-    id="goal_login",
+goal_casino_session = AgentGoal(
+    id="goal_casino_session",
     category_tag="casino-qa",
-    agent_name="Casino Login",
+    agent_name="Casino Session",
     agent_friendly_description=(
-        "Authenticate the casino app end-to-end: launch, dismiss pre-login modals, "
-        "Fanatics ONE 2-step login (email → password), OTP (auto in dev/test), and "
-        "confirm a logged-in home/lobby. Platform-agnostic; learned coordinates "
-        "are persisted per platform/build in the screen-map DB."
+        "Run a casino-app session end-to-end: authenticate, navigate to a game, "
+        "play, and report. Per-turn objective is driven by the intent registry "
+        "(intent_authenticate, intent_navigate_to_screen, intent_play_game, "
+        "intent_report). Platform-agnostic; learned coordinates are persisted per "
+        "platform/build in the screen-map DB."
     ),
-    tools=list(_LOGIN_LOCAL_TOOLS),
+    tools=list(_CASINO_SESSION_LOCAL_TOOLS),
     mcp_server_definition=get_appium_mcp_server_definition(
         platform="android",
-        included_tools=_LOGIN_APPIUM_TOOLS,
+        included_tools=_CASINO_SESSION_APPIUM_TOOLS,
     ),
     description=assemble_description(),
     starter_prompt=build_starter_prompt(),
@@ -73,4 +74,4 @@ goal_login = AgentGoal(
 )
 
 
-login_goals = [goal_login]
+casino_session_goals = [goal_casino_session]

@@ -1,4 +1,4 @@
-"""Smoke test for goal_login.
+"""Smoke test for goal_casino_session — authenticate-only path.
 
 Resets the casino app, starts a fresh agent-workflow, sends "login", and watches
 the worker log for a `LOGIN PASS` marker. Exits 0 on success, 1 on timeout or
@@ -11,7 +11,7 @@ Pre-requisites (asserted at startup):
     - api on http://127.0.0.1:8000
     - android-worker running, logging to /tmp/android-worker.log
     - emulator connected via adb (ANDROID_SERIAL)
-    - .env has AGENT_GOAL=goal_login (else this script forces it via env var)
+    - .env has AGENT_GOAL=goal_casino_session (else this script forces it via env var)
 """
 
 import argparse

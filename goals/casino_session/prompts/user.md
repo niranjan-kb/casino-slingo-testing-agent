@@ -1,4 +1,4 @@
-# goal_login — Authenticate the casino app
+# goal_casino_session — Casino-app session profile
 
 Your job: launch the app, dismiss any pre-login modals, complete the Fanatics ONE 2-step login (email → password → OTP), and confirm a logged-in home/lobby screen. Then stop. Do not navigate further.
 
