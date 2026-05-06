@@ -2,6 +2,117 @@ from typing import Dict, List
 
 from models.tool_definitions import ToolArgument, ToolDefinition
 
+# ----- Slingo QA tools -----
+slingo_wait_seconds_tool = ToolDefinition(
+    name="WaitSeconds",
+    description="Pause execution for a number of seconds. Use after taps that trigger animations or screen transitions.",
+    arguments=[
+        ToolArgument(name="seconds", type="number", description="How many seconds to wait (max 30)"),
+    ],
+)
+
+slingo_tap_coordinate_tool = ToolDefinition(
+    name="TapCoordinate",
+    description="Tap at specific pixel coordinates on the device screen. Use for WebView/game elements that appium_find_element cannot see. For native elements, prefer appium_find_element + appium_click instead.",
+    arguments=[
+        ToolArgument(name="x", type="number", description="X coordinate in physical pixels"),
+        ToolArgument(name="y", type="number", description="Y coordinate in physical pixels"),
+    ],
+)
+
+slingo_detect_screen_tool = ToolDefinition(
+    name="DetectScreen",
+    description="Detect which screen the app is currently showing by analyzing visible elements. Returns the screen name, confidence score, and matched signatures.",
+    arguments=[
+        ToolArgument(name="app_context", type="string", description="'platform' for native app screens, or game name like 'slingo_cash_eruption' for game screens"),
+    ],
+)
+
+slingo_lookup_coords_tool = ToolDefinition(
+    name="LookupCoords",
+    description="Look up stored coordinates for a UI element from the screen map database. Returns x, y, confidence, and whether verification is needed.",
+    arguments=[
+        ToolArgument(name="app_context", type="string", description="'platform' or game name (e.g. 'slingo_cash_eruption')"),
+        ToolArgument(name="screen_name", type="string", description="Screen name (e.g. 'home', 'main_game', 'login')"),
+        ToolArgument(name="element_name", type="string", description="Element name (e.g. 'spin_button', 'search_bar', 'close_button')"),
+    ],
+)
+
+slingo_verify_tap_tool = ToolDefinition(
+    name="VerifyTap",
+    description="Verify that a tap produced the expected screen transition. Updates confidence scores in the coordinate database. Call this after tapping to confirm the tap worked.",
+    arguments=[
+        ToolArgument(name="app_context", type="string", description="'platform' or game name"),
+        ToolArgument(name="screen_name", type="string", description="Screen you were on BEFORE the tap"),
+        ToolArgument(name="element_name", type="string", description="Element you tapped"),
+        ToolArgument(name="tapped_x", type="number", description="X coordinate that was tapped"),
+        ToolArgument(name="tapped_y", type="number", description="Y coordinate that was tapped"),
+        ToolArgument(name="expected_screen", type="string", description="Screen you expect to be on AFTER the tap (optional)"),
+    ],
+)
+
+slingo_find_element_with_fallback_tool = ToolDefinition(
+    name="FindElementWithFallback",
+    description=(
+        "Find a native UI element by trying multiple (strategy, selector) candidates in order. "
+        "Returns the first match's elementUUID — which plugs straight into appium_click, "
+        "appium_set_value, or appium_get_text. Use this INSTEAD of calling appium_find_element "
+        "multiple times yourself: it collapses 3-6 LLM round-trips into one. "
+        "Each candidate is a dict with 'strategy' (e.g. 'xpath', 'id', 'accessibility id', "
+        "'-android uiautomator', 'class name') and 'selector'. Tried in order, first hit wins."
+    ),
+    arguments=[
+        ToolArgument(
+            name="candidates",
+            type="array",
+            description=(
+                "Ordered list of {strategy, selector} dicts. Example: "
+                "[{\"strategy\": \"xpath\", \"selector\": \"//*[@text='Continue']\"}, "
+                "{\"strategy\": \"accessibility id\", \"selector\": \"next button\"}, "
+                "{\"strategy\": \"id\", \"selector\": \"continue_button\"}]"
+            ),
+        ),
+    ],
+)
+
+slingo_smart_tap_tool = ToolDefinition(
+    name="SmartTap",
+    description="All-in-one tap tool: looks up coordinates from the DB, taps, waits for transition, verifies the result, and updates confidence — guaranteeing the learning loop runs every time. Use this instead of separate LookupCoords → TapCoordinate → WaitSeconds → VerifyTap calls.",
+    arguments=[
+        ToolArgument(name="app_context", type="string", description="'platform' or game name (e.g. 'slingo_cash_eruption')"),
+        ToolArgument(name="screen_name", type="string", description="Current screen name (e.g. 'home', 'main_game', 'login')"),
+        ToolArgument(name="element_name", type="string", description="Element to tap (e.g. 'spin_button', 'search_bar', 'close_button')"),
+        ToolArgument(name="expected_screen", type="string", description="Screen expected after the tap (optional — if omitted, success = screen changed)"),
+        ToolArgument(name="wait_seconds", type="number", description="Seconds to wait after tap for UI transition (default 2, max 30)"),
+    ],
+)
+
+slingo_save_evidence_tool = ToolDefinition(
+    name="SaveEvidence",
+    description="Save a screenshot as labeled test evidence for the QA report. Use after key moments: balance reads, spin results, wild encounters, exit confirmation.",
+    arguments=[
+        ToolArgument(name="screenshot_path", type="string", description="Path to the screenshot file (from appium_screenshot result)"),
+        ToolArgument(name="label", type="string", description="Descriptive label (e.g. 'pre_game_balance', 'spin_3_wild', 'post_exit')"),
+        ToolArgument(name="run_id", type="string", description="Test run ID (optional, auto-generated if omitted)"),
+    ],
+)
+
+slingo_generate_report_tool = ToolDefinition(
+    name="GenerateReport",
+    description="Generate a structured QA test report with pass/fail determination. Call this at the end of a test run with all collected data.",
+    arguments=[
+        ToolArgument(name="starting_balance", type="string", description="Balance before game (e.g. '$50.00')"),
+        ToolArgument(name="ending_balance", type="string", description="Balance after game (e.g. '$49.80')"),
+        ToolArgument(name="spins_played", type="number", description="Number of spins completed"),
+        ToolArgument(name="total_spins", type="number", description="Expected spins (default 5)"),
+        ToolArgument(name="wilds", type="number", description="Number of wilds encountered"),
+        ToolArgument(name="super_wilds", type="number", description="Number of super wilds encountered"),
+        ToolArgument(name="extra_spins_purchased", type="number", description="Must be 0 for PASS"),
+        ToolArgument(name="anomalies", type="string", description="Comma-separated list of anomaly descriptions"),
+        ToolArgument(name="run_id", type="string", description="Test run ID (optional)"),
+    ],
+)
+
 # ----- System tools -----
 list_agents_tool = ToolDefinition(
     name="ListAgents",

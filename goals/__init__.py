@@ -1,44 +1,40 @@
+"""Casino QA agent goals — capability-named, casino-domain only.
+
+The upstream `temporal-community/temporal-ai-agent` ships a zoo of demo
+goals (Event Flight Finder, Schedule PTO, Pirate Treasure, etc.). None of
+that belongs in a casino-QA agent. We register only the goals our agent
+actually composes: login, navigate, play, etc.
+"""
+
 import os
 from typing import List
 
 import tools.tool_registry as tool_registry
-from goals.agent_selection import agent_selection_goals
-from goals.ecommerce import ecommerce_goals
-from goals.finance import finance_goals
-from goals.food import food_goals
-from goals.hr import hr_goals
-from goals.stripe_mcp import mcp_goals
-from goals.travel import travel_goals
+from goals.casino_session import casino_session_goals
+from goals.slingo_qa_android import slingo_qa_android_goals
 from models.tool_definitions import AgentGoal
 
-goal_list: List[AgentGoal] = []
-goal_list.extend(agent_selection_goals)
-goal_list.extend(travel_goals)
-goal_list.extend(hr_goals)
-goal_list.extend(finance_goals)
-goal_list.extend(ecommerce_goals)
-goal_list.extend(mcp_goals)
-goal_list.extend(food_goals)
 
-# for multi-goal, just set list agents as the last tool
-first_goal_value = os.getenv("AGENT_GOAL")
-if first_goal_value is None:
-    multi_goal_mode = False  # default to single agent mode if unset
-elif (
-    first_goal_value is not None
-    and first_goal_value.lower() == "goal_choose_agent_type"
-):
-    multi_goal_mode = True
-else:
-    multi_goal_mode = False
+# Single source of truth for which goals the casino agent can run.
+# Per-turn behavior is driven by the intent registry (intents/), not by goals.
+goal_list: List[AgentGoal] = []
+goal_list.extend(casino_session_goals)
+goal_list.extend(slingo_qa_android_goals)
+
+
+# Multi-goal mode is reserved for when we have ≥ 2 distinct goal *configurations*
+# (e.g. casino-Android + sportsbook-web with different MCP servers). Today the
+# canonical entry point is `AGENT_GOAL=goal_casino_session`. The picker
+# (`goal_choose_agent_type`) was an upstream generic-platform construct and is
+# no longer registered.
+first_goal_value = (os.getenv("AGENT_GOAL") or "").strip().lower()
+multi_goal_mode = first_goal_value == "goal_choose_agent_type"
 
 if multi_goal_mode:
-    for goal in goal_list:
-        list_agents_found: bool = False
-        for tool in goal.tools:
-            if tool.name == "ListAgents":
-                list_agents_found = True
-                continue
-        if list_agents_found is False:
-            goal.tools.append(tool_registry.list_agents_tool)
-            continue
+    # Future: register a casino-themed picker here. For now, falling back
+    # to single-goal is safer than booting an unregistered picker.
+    raise RuntimeError(
+        "Multi-goal mode is not yet wired for casino. "
+        "Set AGENT_GOAL=goal_casino_session (or another concrete goal id) in .env. "
+        "When you have ≥3 casino capabilities, register a casino-themed picker."
+    )

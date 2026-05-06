@@ -1,6 +1,8 @@
 import inspect
 import json
 import os
+import re
+import shutil
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence
@@ -25,13 +27,145 @@ from shared.mcp_client_manager import MCPClientManager
 try:
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
+    from mcp.client.sse import sse_client
 except ImportError:
     # Fallback if MCP not installed
     ClientSession = None
     StdioServerParameters = None
     stdio_client = None
+    sse_client = None
 
 load_dotenv(override=True)
+
+# Module-level persistent MCP manager — shared across all activity calls
+_persistent_mcp_manager: Optional[MCPClientManager] = None
+
+
+# Synthetic tool used as the LLM's structured-output channel.
+#
+# Every agent_toolPlanner LLM call forces tool_choice to this tool, so the
+# model's output shape is guaranteed by the API instead of by prompt-prayer.
+# The `tool` field inside this tool's arguments names the user-facing tool
+# the orchestrator should run next (e.g. "appium_click", "FindElementWithFallback").
+#
+# We build the schema per-call so the `tool` field can be constrained to an
+# enum of the tools actually available in the current goal — the model
+# literally cannot emit a name that wasn't on the goal's tool list. This
+# prevents hallucinations like `tool="ToolActivities.agent_toolPlanner"`.
+
+
+def _build_plan_next_action_tool(
+    allowed_tool_names: Optional[List[str]],
+    allowed_intent_ids: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """Build the plan_next_action schema with `tool` constrained to a per-call enum.
+
+    `allowed_tool_names` should be every user-facing tool name the agent is
+    allowed to call this turn (native tools + MCP tools). When None or empty,
+    `tool` is left as a free-form string (development fallback).
+
+    `allowed_intent_ids` (specs/004-nav-graph-intents) — when non-empty, the
+    schema gains an `active_intent` field constrained to this enum so the
+    model literally cannot emit an unregistered intent id. None / [] keeps
+    the schema back-compat (no active_intent field at all).
+    """
+    if allowed_tool_names:
+        # Anthropic JSON Schema doesn't permit `enum` on a `["string", "null"]`
+        # union directly, but it accepts `enum` containing both strings and
+        # null. We use that form so the model can still set tool=null for
+        # question/done/pick-new-goal steps.
+        tool_field: Dict[str, Any] = {
+            "type": ["string", "null"],
+            "enum": [None, *sorted(set(allowed_tool_names))],
+            "description": (
+                "Name of the user-facing tool to run when next='confirm'. "
+                "MUST be one of the tools listed in the enum. "
+                "Set to null when next is 'question', 'pick-new-goal', or 'done'."
+            ),
+        }
+    else:
+        tool_field = {
+            "type": ["string", "null"],
+            "description": (
+                "Name of the user-facing tool to run when next='confirm'. "
+                "Must be exactly one of the tools listed in the system prompt. "
+                "Set to null when next is 'question', 'pick-new-goal', or 'done'."
+            ),
+        }
+
+    properties: Dict[str, Any] = {
+        "next": {
+            "type": "string",
+            "enum": ["question", "confirm", "pick-new-goal", "done"],
+            "description": (
+                "What the orchestrator should do next. "
+                "'question' = ask the user for input via the `response` field. "
+                "'confirm' = run the named `tool` with `args`. "
+                "'pick-new-goal' = signal that the current goal is complete and a new one should be selected (multi-goal mode only). "
+                "'done' = end the conversation OR mark the active intent complete (intent layer)."
+            ),
+        },
+        "tool": tool_field,
+        "args": {
+            "type": "object",
+            "description": (
+                "Arguments for the named tool. Empty object {} when tool is null. "
+                "All values must match the tool's declared argument types and names."
+            ),
+            "additionalProperties": True,
+        },
+        "response": {
+            "type": "string",
+            "description": (
+                "Plain-text message shown to the user. May be a question (when next='question'), "
+                "a status update before running a tool (when next='confirm'), or a final summary (when next='done')."
+            ),
+        },
+    }
+    required = ["next", "response"]
+
+    if allowed_intent_ids:
+        properties["active_intent"] = {
+            "type": ["string", "null"],
+            "enum": [None, *sorted(set(allowed_intent_ids))],
+            "description": (
+                "Which intent is active for this turn. The closed-set registry "
+                "enum prevents hallucinating an unregistered intent id. Set to "
+                "null only when next='done' and you are wrapping up the session."
+            ),
+        }
+        required.append("active_intent")
+
+    return {
+        "type": "function",
+        "function": {
+            "name": "plan_next_action",
+            "description": (
+                "Emit the agent's next planning step. Always called exactly once per turn. "
+                "The orchestrator dispatches based on the `next` and `tool` fields."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": properties,
+                "required": required,
+                "additionalProperties": False,
+            },
+        },
+    }
+
+
+def get_persistent_mcp_manager() -> Optional[MCPClientManager]:
+    """Get the module-level persistent MCP manager (if running)."""
+    global _persistent_mcp_manager
+    if _persistent_mcp_manager and _persistent_mcp_manager.is_running:
+        return _persistent_mcp_manager
+    return None
+
+
+def set_persistent_mcp_manager(manager: MCPClientManager) -> None:
+    """Set the module-level persistent MCP manager (called from worker startup)."""
+    global _persistent_mcp_manager
+    _persistent_mcp_manager = manager
 
 
 class ToolActivities:
@@ -52,6 +186,17 @@ class ToolActivities:
         self, validation_input: ValidationInput
     ) -> ValidationResult:
         """
+        ARCHIVED 2026-04-29 — no longer invoked by AgentGoalWorkflow.
+
+        Reason: full LLM round-trip per user message for low ROI. The toolPlanner
+        already handles off-topic input gracefully (returns next='question' with
+        a clarifying response). Validator added ~500ms-2s + thousands of tokens
+        per turn without measurably improving conversation quality.
+
+        Kept here so it can be re-introduced (e.g. as a faster heuristic, or
+        gated behind a STRICT_VALIDATION env flag) without recreating the
+        plumbing. The activity is still registered with the worker on startup.
+
         Validates the prompt in the context of the conversation history and agent goal.
         Returns a ValidationResult indicating if the prompt makes sense given the context.
         """
@@ -110,11 +255,19 @@ class ToolActivities:
 
     @activity.defn
     async def agent_toolPlanner(self, input: ToolPromptInput) -> dict:
+        """Plan the next action via Anthropic tool-use forcing.
+
+        We define a single synthetic tool, `plan_next_action`, whose schema is
+        the structured shape we need (next/tool/args/response). LiteLLM forwards
+        `tools=[...]` + `tool_choice` to Bedrock-Anthropic; the model MUST call
+        that tool with arguments matching the schema. No JSON parsing, no prose
+        slicing, no parse-and-pray. Structurally guaranteed by the model.
+        """
         messages = [
             {
                 "role": "system",
                 "content": input.context_instructions
-                + ". The current date is "
+                + "\n\nCurrent date: "
                 + datetime.now().strftime("%B %d, %Y"),
             },
             {
@@ -123,58 +276,103 @@ class ToolActivities:
             },
         ]
 
+        # Build the planning tool with the goal's allowed tool names baked in
+        # as an enum on the `tool` field. The model literally cannot hallucinate
+        # a tool name not on this list. When the workflow passes intent ids,
+        # an `active_intent` enum is added by the same mechanism (specs/004).
+        allowed_names = getattr(input, "allowed_tool_names", None) or []
+        allowed_intents = getattr(input, "allowed_intent_ids", None) or []
+        plan_tool = _build_plan_next_action_tool(allowed_names, allowed_intents)
+
+        completion_kwargs = {
+            "model": self.llm_model,
+            "messages": messages,
+            "api_key": self.llm_key,
+            "tools": [plan_tool],
+            "tool_choice": {
+                "type": "function",
+                "function": {"name": "plan_next_action"},
+            },
+            # LiteLLM gates tool-use behind a per-model capability list. For
+            # Bedrock-Anthropic, native tool-use works on every Sonnet/Opus
+            # 3.5+ model, but LiteLLM only auto-enables it for ids it has in
+            # its registry. Force-allow these params so tool-use forcing works
+            # for newer models LiteLLM hasn't catalogued yet.
+            "allowed_openai_params": ["tools", "tool_choice"],
+        }
+        if self.llm_base_url:
+            completion_kwargs["base_url"] = self.llm_base_url
+
         try:
-            completion_kwargs = {
-                "model": self.llm_model,
-                "messages": messages,
-                "api_key": self.llm_key,
-            }
-
-            # Add base_url if configured
-            if self.llm_base_url:
-                completion_kwargs["base_url"] = self.llm_base_url
-
             response = completion(**completion_kwargs)
+        except Exception as e:
+            activity.logger.error(f"LLM completion failed: {e}")
+            raise
 
-            response_content = response.choices[0].message.content
-            activity.logger.info(f"Raw LLM response: {repr(response_content)}")
-            activity.logger.info(f"LLM response content: {response_content}")
-            activity.logger.info(f"LLM response type: {type(response_content)}")
-            activity.logger.info(
-                f"LLM response length: {len(response_content) if response_content else 'None'}"
+        return self._extract_planned_action(response)
+
+    @staticmethod
+    def _extract_planned_action(response: Any) -> dict:
+        """Pull the structured plan out of a forced-tool-use response.
+
+        LiteLLM normalises Anthropic's `tool_use` blocks into OpenAI-style
+        `message.tool_calls`. With `tool_choice` forced, exactly one call to
+        `plan_next_action` is guaranteed; its `.function.arguments` field is a
+        JSON string of the validated schema.
+        """
+        try:
+            choice = response.choices[0]
+            tool_calls = getattr(choice.message, "tool_calls", None) or []
+        except (AttributeError, IndexError) as e:
+            raise ApplicationError(
+                f"LLM response missing choices/message: {e!r}"
+            ) from e
+
+        if not tool_calls:
+            # Defensive fallback: model returned plain text despite tool_choice.
+            # This should never happen on Anthropic with tool_choice forced;
+            # log loudly and try to salvage the content as JSON.
+            content = getattr(choice.message, "content", "") or ""
+            activity.logger.error(
+                "LLM returned no tool_calls despite forced tool_choice. "
+                f"Content fallback: {content[:500]!r}"
+            )
+            raise ApplicationError(
+                "Model did not call plan_next_action — structured output broken"
             )
 
-            # Use the new sanitize function
-            response_content = self.sanitize_json_response(response_content)
-            activity.logger.info(f"Sanitized response: {repr(response_content)}")
-
-            return self.parse_json_response(response_content)
-        except Exception as e:
-            print(f"Error in LLM completion: {str(e)}")
-            raise
-
-    def parse_json_response(self, response_content: str) -> dict:
-        """
-        Parses the JSON response content and returns it as a dictionary.
-        """
+        call = tool_calls[0]
         try:
-            data = json.loads(response_content)
-            return data
+            args_json = call.function.arguments
+        except AttributeError as e:
+            raise ApplicationError(
+                f"tool_call shape unexpected: {call!r}"
+            ) from e
+
+        try:
+            data = json.loads(args_json) if isinstance(args_json, str) else args_json
         except json.JSONDecodeError as e:
-            print(f"Invalid JSON: {e}")
-            raise
+            # The model is supposed to give us JSON, but if Bedrock ever
+            # surfaces invalid JSON we want the failure visible, not silent.
+            activity.logger.error(
+                f"plan_next_action arguments not valid JSON: {args_json!r}"
+            )
+            raise ApplicationError(f"Invalid JSON from plan_next_action: {e}") from e
 
-    def sanitize_json_response(self, response_content: str) -> str:
-        """
-        Sanitizes the response content to ensure it's valid JSON.
-        """
-        # Remove any markdown code block markers
-        response_content = response_content.replace("```json", "").replace("```", "")
+        # Normalise: ensure required-ish fields exist downstream (workflow
+        # reads tool_data.get('next'), get('tool'), get('args'), get('response')).
+        data.setdefault("next", "question")
+        data.setdefault("tool", None)
+        data.setdefault("args", {})
+        data.setdefault("response", "")
+        data.setdefault("active_intent", None)
 
-        # Remove any leading/trailing whitespace
-        response_content = response_content.strip()
-
-        return response_content
+        activity.logger.info(
+            f"Planned action: next={data['next']} tool={data['tool']} "
+            f"intent={data.get('active_intent')} "
+            f"response={str(data.get('response', ''))[:160]!r}"
+        )
+        return data
 
     @activity.defn
     async def get_wf_env_vars(self, input: EnvLookupInput) -> EnvLookupOutput:
@@ -305,6 +503,7 @@ def _build_connection(
             "command": server_definition.get("command", "python"),
             "args": server_definition.get("args", ["server.py"]),
             "env": server_definition.get("env", {}) or {},
+            "sse_url": server_definition.get("sse_url"),
         }
 
     return {
@@ -312,29 +511,149 @@ def _build_connection(
         "command": server_definition.command,
         "args": server_definition.args,
         "env": server_definition.env or {},
+        "sse_url": getattr(server_definition, "sse_url", None),
     }
 
 
 def _normalize_result(result: Any) -> Any:
-    """Normalize MCP tool result for serialization"""
+    """Normalize MCP tool result for serialization.
+
+    Large image payloads (base64 screenshots) are saved to files to avoid
+    exceeding Temporal's ~2MB payload limit.
+    """
     if hasattr(result, "content"):
-        # Handle MCP result objects
         if hasattr(result.content, "__iter__") and not isinstance(result.content, str):
-            return [
-                item.text if hasattr(item, "text") else str(item)
-                for item in result.content
-            ]
+            normalized = []
+            for item in result.content:
+                item_type = getattr(item, "type", None)
+
+                # Handle base64 image content — save to file
+                if item_type == "image" and hasattr(item, "data"):
+                    filepath = _save_screenshot(item.data, getattr(item, "mimeType", "image/png"))
+                    normalized.append(f"Screenshot saved to: {filepath}")
+                elif hasattr(item, "text"):
+                    text = item.text
+                    # Catch base64-encoded images embedded in text fields
+                    if len(text) > 50000 and ("base64" in text[:200].lower() or text[:20].startswith("iVBOR")):
+                        filepath = _save_screenshot(text, "image/png")
+                        normalized.append(f"Screenshot saved to: {filepath}")
+                    else:
+                        copied = _copy_external_screenshot(text)
+                        normalized.append(copied if copied else text)
+                else:
+                    s = str(item)
+                    if len(s) > 50000:
+                        normalized.append(s[:500] + f"... [truncated, {len(s)} chars total]")
+                    else:
+                        normalized.append(s)
+            return normalized
         return str(result.content)
     return result
 
 
+_EXTERNAL_SCREENSHOT_RE = re.compile(
+    r"(/(?:[^\s\"'`<>|]+/)?screenshot[_\-]?[^\s\"'`<>|]*\.(?:png|jpe?g))",
+    re.IGNORECASE,
+)
+
+
+def _copy_external_screenshot(text: str) -> Optional[str]:
+    """If `text` references an existing image file outside our screenshots dir,
+    copy it into ./screenshots/ so the API/sidebar can serve it.
+
+    Returns a replacement message containing the new path, or None if nothing
+    was copied (text passes through unchanged).
+    """
+    if not text or len(text) > 4000:
+        return None
+
+    match = _EXTERNAL_SCREENSHOT_RE.search(text)
+    if not match:
+        return None
+
+    src = match.group(1)
+    if not os.path.isfile(src):
+        return None
+
+    screenshots_dir = os.path.join(os.getcwd(), "screenshots")
+    if os.path.commonpath([os.path.abspath(src), os.path.abspath(screenshots_dir)]) == os.path.abspath(screenshots_dir):
+        return None  # already inside our dir
+
+    os.makedirs(screenshots_dir, exist_ok=True)
+    ext = os.path.splitext(src)[1].lower().lstrip(".") or "png"
+    timestamp = datetime.now().strftime("%Y%m%dT%H%M%S_%f")
+    dest = os.path.join(screenshots_dir, f"screenshot_{timestamp}.{ext}")
+
+    try:
+        shutil.copyfile(src, dest)
+    except OSError as e:
+        activity.logger.warning(f"Failed to copy screenshot {src} -> {dest}: {e}")
+        return None
+
+    activity.logger.info(f"Screenshot copied: {src} -> {dest}")
+    return f"Screenshot saved to: {dest}"
+
+
+def _save_screenshot(data: str, mime_type: str = "image/png") -> str:
+    """Save base64 screenshot data to a file and return the path."""
+    import base64
+
+    screenshots_dir = os.path.join(os.getcwd(), "screenshots")
+    os.makedirs(screenshots_dir, exist_ok=True)
+
+    ext = "png" if "png" in mime_type else "jpg"
+    timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+    filepath = os.path.join(screenshots_dir, f"screenshot_{timestamp}.{ext}")
+
+    # Remove data URI prefix if present
+    if "," in data[:100]:
+        data = data.split(",", 1)[1]
+
+    with open(filepath, "wb") as f:
+        f.write(base64.b64decode(data))
+
+    logger_msg = f"Screenshot saved: {filepath} ({os.path.getsize(filepath)} bytes)"
+    activity.logger.info(logger_msg)
+    return filepath
+
+
+_STRING_ONLY_KEYS = frozenset({
+    "text",        # appium_set_value
+    "value",       # legacy alias
+    "selector",    # appium_find_element
+    "strategy",    # appium_find_element
+    "elementUUID", # appium_click / set_value / get_text
+    "elementId",   # legacy
+    "id",          # appium_app id (package name)
+    "key",         # appium_mobile_press_key
+    "context",     # appium_context
+    "label",       # SaveEvidence / GenerateReport
+    "app_context",
+    "screen_name",
+    "element_name",
+    "expected_screen",
+    "platform",
+    "deviceUdid",
+    "action",      # appium_app, appium_alert, appium_context
+})
+
+
 def _convert_args_types(tool_args: Dict[str, Any]) -> Dict[str, Any]:
-    """Convert string arguments to appropriate types for MCP tools"""
+    """Convert string arguments to appropriate types for MCP tools.
+
+    NOTE: Numeric-looking strings on string-only keys (e.g. an OTP `text="864408"`)
+    must NOT be coerced to int — the MCP server rejects them as type-mismatched.
+    """
     converted_args = {}
 
     for key, value in tool_args.items():
         if key == "server_definition":
             # Skip server_definition - it's metadata
+            continue
+
+        if key in _STRING_ONLY_KEYS:
+            # Preserve as-is; coercion would corrupt OTPs, package names, etc.
+            converted_args[key] = value
             continue
 
         if isinstance(value, str):
@@ -371,48 +690,39 @@ async def _execute_mcp_tool(
     connection = _build_connection(server_definition)
 
     try:
-        if connection["type"] == "stdio":
-            # Handle stdio connection
+        if connection["type"] == "sse" and connection.get("sse_url"):
+            # Use the persistent manager (keeps session alive across calls)
+            manager = get_persistent_mcp_manager()
+            if manager:
+                activity.logger.info(
+                    f"Using persistent MCP manager for {tool_name}"
+                )
+                result = await manager.call_tool(tool_name, converted_args)
+                activity.logger.info(f"MCP tool {tool_name} returned result: {result}")
+                normalized_result = _normalize_result(result)
+                activity.logger.info(f"MCP tool {tool_name} completed successfully")
+                return {
+                    "tool": tool_name,
+                    "success": True,
+                    "content": normalized_result,
+                }
+            else:
+                # Fallback: ephemeral SSE connection (session won't persist)
+                activity.logger.warning(
+                    "Persistent MCP manager not available, using ephemeral SSE connection"
+                )
+                return await _execute_via_sse(
+                    tool_name, converted_args, connection["sse_url"]
+                )
+
+        elif connection["type"] == "stdio":
+            # Handle stdio connection (spawns new process per call)
             async with _stdio_connection(
                 command=connection.get("command", "python"),
                 args=connection.get("args", ["server.py"]),
                 env=connection.get("env", {}),
             ) as (read, write):
-                async with ClientSession(read, write) as session:
-                    # Initialize the session
-                    activity.logger.info(f"Initializing MCP session for {tool_name}")
-                    await session.initialize()
-                    activity.logger.info(f"MCP session initialized for {tool_name}")
-
-                    # Call the tool
-                    activity.logger.info(
-                        f"Calling MCP tool {tool_name} with args: {converted_args}"
-                    )
-                    try:
-                        result = await session.call_tool(
-                            tool_name, arguments=converted_args
-                        )
-                        activity.logger.info(
-                            f"MCP tool {tool_name} returned result: {result}"
-                        )
-                    except Exception as tool_exc:
-                        activity.logger.error(
-                            f"MCP tool {tool_name} call failed: {type(tool_exc).__name__}: {tool_exc}"
-                        )
-                        raise
-
-                    normalized_result = _normalize_result(result)
-                    activity.logger.info(f"MCP tool {tool_name} completed successfully")
-
-                    return {
-                        "tool": tool_name,
-                        "success": True,
-                        "content": normalized_result,
-                    }
-
-        elif connection["type"] == "tcp":
-            # Handle TCP connection (placeholder for future implementation)
-            raise ApplicationError("TCP connections not yet implemented")
+                return await _call_mcp_tool(tool_name, converted_args, read, write)
 
         else:
             raise ApplicationError(f"Unsupported connection type: {connection['type']}")
@@ -429,14 +739,64 @@ async def _execute_mcp_tool(
         }
 
 
+async def _call_mcp_tool(
+    tool_name: str, converted_args: Dict[str, Any], read, write
+) -> Dict[str, Any]:
+    """Call an MCP tool over an established read/write connection"""
+    async with ClientSession(read, write) as session:
+        activity.logger.info(f"Initializing MCP session for {tool_name}")
+        await session.initialize()
+        activity.logger.info(f"MCP session initialized for {tool_name}")
+
+        activity.logger.info(
+            f"Calling MCP tool {tool_name} with args: {converted_args}"
+        )
+        try:
+            result = await session.call_tool(tool_name, arguments=converted_args)
+            activity.logger.info(f"MCP tool {tool_name} returned result: {result}")
+        except Exception as tool_exc:
+            activity.logger.error(
+                f"MCP tool {tool_name} call failed: {type(tool_exc).__name__}: {tool_exc}"
+            )
+            raise
+
+        normalized_result = _normalize_result(result)
+        activity.logger.info(f"MCP tool {tool_name} completed successfully")
+
+        return {
+            "tool": tool_name,
+            "success": True,
+            "content": normalized_result,
+        }
+
+
+async def _execute_via_sse(
+    tool_name: str, converted_args: Dict[str, Any], sse_url: str
+) -> Dict[str, Any]:
+    """Execute an MCP tool via SSE connection to a persistent server"""
+    if sse_client is None:
+        raise ApplicationError("MCP SSE client not available")
+
+    activity.logger.info(f"Connecting to MCP server via SSE: {sse_url}")
+    async with sse_client(sse_url) as (read, write):
+        return await _call_mcp_tool(tool_name, converted_args, read, write)
+
+
 @asynccontextmanager
 async def _stdio_connection(command: str, args: list, env: dict):
     """Create stdio connection to MCP server"""
     if stdio_client is None:
         raise ApplicationError("MCP client libraries not available")
 
-    # Create server parameters
-    server_params = StdioServerParameters(command=command, args=args, env=env)
+    # Explicitly pass os.environ so the subprocess inherits PATH, ANDROID_HOME, etc.
+    # StdioServerParameters(env=None) may not reliably inherit the parent env in all MCP client versions.
+    # Merge any non-empty overrides from the caller on top of the full parent environment.
+    merged_env = dict(os.environ)
+    if env:
+        for k, v in env.items():
+            if v:  # only override with non-empty values
+                merged_env[k] = v
+    server_params = StdioServerParameters(command=command, args=args, env=merged_env)
 
     async with stdio_client(server_params) as (read, write):
         yield read, write
@@ -452,49 +812,45 @@ async def mcp_list_tools(
 
     connection = _build_connection(server_definition)
 
+    async def _list_tools_on_session(read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            tools_response = await session.list_tools()
+            tools_info = {}
+            for tool in tools_response.tools:
+                if include_tools is None or tool.name in include_tools:
+                    tools_info[tool.name] = {
+                        "name": tool.name,
+                        "description": tool.description,
+                        "inputSchema": (
+                            tool.inputSchema.model_dump()
+                            if hasattr(tool.inputSchema, "model_dump")
+                            else str(tool.inputSchema)
+                        ),
+                    }
+            activity.logger.info(
+                f"Found {len(tools_info)} tools for server {server_definition.name}"
+            )
+            return {
+                "server_name": server_definition.name,
+                "success": True,
+                "tools": tools_info,
+                "total_available": len(tools_response.tools),
+                "filtered_count": len(tools_info),
+            }
+
     try:
-        if connection["type"] == "stdio":
+        if connection["type"] == "sse" and connection.get("sse_url"):
+            async with sse_client(connection["sse_url"]) as (read, write):
+                return await _list_tools_on_session(read, write)
+
+        elif connection["type"] == "stdio":
             async with _stdio_connection(
                 command=connection.get("command", "python"),
                 args=connection.get("args", ["server.py"]),
                 env=connection.get("env", {}),
             ) as (read, write):
-                async with ClientSession(read, write) as session:
-                    # Initialize the session
-                    await session.initialize()
-
-                    # List available tools
-                    tools_response = await session.list_tools()
-
-                    # Process tools based on include_tools filter
-                    tools_info = {}
-                    for tool in tools_response.tools:
-                        # If include_tools is specified, only include those tools
-                        if include_tools is None or tool.name in include_tools:
-                            tools_info[tool.name] = {
-                                "name": tool.name,
-                                "description": tool.description,
-                                "inputSchema": (
-                                    tool.inputSchema.model_dump()
-                                    if hasattr(tool.inputSchema, "model_dump")
-                                    else str(tool.inputSchema)
-                                ),
-                            }
-
-                    activity.logger.info(
-                        f"Found {len(tools_info)} tools for server {server_definition.name}"
-                    )
-
-                    return {
-                        "server_name": server_definition.name,
-                        "success": True,
-                        "tools": tools_info,
-                        "total_available": len(tools_response.tools),
-                        "filtered_count": len(tools_info),
-                    }
-
-        elif connection["type"] == "tcp":
-            raise ApplicationError("TCP connections not yet implemented")
+                return await _list_tools_on_session(read, write)
 
         else:
             raise ApplicationError(f"Unsupported connection type: {connection['type']}")

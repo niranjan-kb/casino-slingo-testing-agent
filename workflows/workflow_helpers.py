@@ -7,7 +7,7 @@ from temporalio.exceptions import ActivityError
 
 from models.data_types import ConversationHistory, ToolPromptInput
 from models.tool_definitions import AgentGoal, ToolDefinition
-from prompts.agent_prompt_generators import (
+from prompts.generators import (
     generate_missing_args_prompt,
     generate_tool_completion_prompt,
 )
@@ -16,6 +16,7 @@ from shared.config import TEMPORAL_LEGACY_TASK_QUEUE
 # Constants from original file
 TOOL_ACTIVITY_START_TO_CLOSE_TIMEOUT = timedelta(seconds=12)
 TOOL_ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT = timedelta(minutes=30)
+MCP_TOOL_ACTIVITY_START_TO_CLOSE_TIMEOUT = timedelta(seconds=60)
 LLM_ACTIVITY_START_TO_CLOSE_TIMEOUT = timedelta(seconds=20)
 LLM_ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT = timedelta(minutes=30)
 
@@ -43,6 +44,7 @@ async def handle_tool_execution(
     add_message_callback: callable,
     prompt_queue: Deque[str],
     goal: AgentGoal = None,
+    multi_goal_mode: bool = False,
 ) -> None:
     """Execute a tool after confirmation and handle its result."""
     workflow.logger.info(f"Confirmed. Proceeding with tool: {current_tool}")
@@ -67,7 +69,7 @@ async def handle_tool_execution(
                 current_tool,
                 mcp_args,
                 schedule_to_close_timeout=TOOL_ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT,
-                start_to_close_timeout=TOOL_ACTIVITY_START_TO_CLOSE_TIMEOUT,
+                start_to_close_timeout=MCP_TOOL_ACTIVITY_START_TO_CLOSE_TIMEOUT,
                 retry_policy=RetryPolicy(
                     initial_interval=timedelta(seconds=5), backoff_coefficient=1
                 ),
@@ -100,7 +102,9 @@ async def handle_tool_execution(
         dynamic_result = {"error": str(e), "tool": current_tool}
 
     add_message_callback("tool_result", dynamic_result)
-    prompt_queue.append(generate_tool_completion_prompt(current_tool, dynamic_result))
+    prompt_queue.append(
+        generate_tool_completion_prompt(current_tool, dynamic_result, multi_goal_mode)
+    )
 
 
 async def handle_missing_args(

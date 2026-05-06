@@ -7,7 +7,7 @@ handoffs:
   - label: Clarify Spec Requirements
     agent: speckit.clarify
     prompt: Clarify specification requirements
-    send: true
+    send: trueco
 ---
 
 ## User Input

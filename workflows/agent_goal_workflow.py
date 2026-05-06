@@ -10,21 +10,27 @@ from models.data_types import (
     EnvLookupInput,
     EnvLookupOutput,
     NextStep,
-    ValidationInput,
 )
 from models.tool_definitions import AgentGoal
 from workflows import workflow_helpers as helpers
 from workflows.workflow_helpers import (
     LLM_ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT,
     LLM_ACTIVITY_START_TO_CLOSE_TIMEOUT,
+    MCP_TOOL_ACTIVITY_START_TO_CLOSE_TIMEOUT,
 )
 
 with workflow.unsafe.imports_passed_through():
+    from activities.observer_activity import run_observers
     from activities.tool_activities import ToolActivities, mcp_list_tools
     from goals import goal_list
+    from intents import load_registry as _load_intent_registry
     from models.data_types import CombinedInput, ToolPromptInput
-    from prompts.agent_prompt_generators import generate_genai_prompt
+    from prompts.generators import generate_genai_prompt
     from tools.tool_registry import create_mcp_tool_definitions
+
+# Loaded once per worker process at module import (mirrors goal_list pattern).
+# Replay-safe: same files on disk → same registry → same allowed_intent_ids.
+_INTENT_REGISTRY = _load_intent_registry()
 
 # Constants
 MAX_TURNS_BEFORE_CONTINUE = 250
@@ -36,7 +42,7 @@ class ToolData(TypedDict, total=False):
     tool: str
     args: Dict[str, Any]
     response: str
-    force_confirm: bool = True
+    force_confirm: bool  # default applied at write site, not in TypedDict
 
 
 @workflow.defn
@@ -61,6 +67,29 @@ class AgentGoalWorkflow:
             False  # set from env file in activity lookup_wf_env_settings
         )
         self.mcp_tools_info: Optional[dict] = None  # stores complete MCP tools result
+        # Tool-result count at the moment we last switched goals.
+        # Used to guard against an LLM that emits `pick-new-goal` immediately
+        # after a `ChangeGoal` switch, before any of the new goal's phases
+        # have actually executed.
+        self.tool_results_count_at_last_goal_change: int = 0
+
+        # Observer framework state (specs/003-observer-framework). Phase 1
+        # populates observation_log via the run_observers activity firing
+        # after each tool result (FR-006, FR-018). pending_observations is
+        # reserved for sub-flow suggestions wired in phase 2+ (FR-013).
+        self.observation_log: List[Dict[str, Any]] = []
+        self.pending_observations: List[Dict[str, Any]] = []
+        self.seen_signatures: List[str] = []  # per-run novelty cache
+
+        # Intent layer state (specs/004-nav-graph-intents).
+        # session_prompt = the user's first non-tagged message (the high-level
+        # ask that drove this session). active_intent is set from each planner
+        # turn's tool_data. completed_intents grows when the LLM emits
+        # next='done' while an intent is active (intent-level done, not
+        # session-level).
+        self.session_prompt: str = ""
+        self.active_intent: Optional[str] = None
+        self.completed_intents: List[str] = []
 
     # see ../api/main.py#temporal_client.start_workflow() for how the input parameters are set
     @workflow.run
@@ -116,47 +145,53 @@ class AgentGoalWorkflow:
                     f"workflow step: processing message on the prompt queue, message is {prompt}"
                 )
 
-                # Validate user-provided prompts
+                # Record user-provided prompts.
+                # Validator (agent_validatePrompt) is ARCHIVED as of 2026-04-29 —
+                # adds an LLM round-trip per user message for low ROI.
+                # The toolPlanner LLM handles off-topic input via next='question'.
+                # Re-enable by restoring the agent_validatePrompt call here.
                 if self.is_user_prompt(prompt):
                     self.add_message("user", prompt)
-
-                    # Validate the prompt before proceeding
-                    validation_input = ValidationInput(
-                        prompt=prompt,
-                        conversation_history=self.conversation_history,
-                        agent_goal=self.goal,
-                    )
-                    validation_result = await workflow.execute_activity_method(
-                        ToolActivities.agent_validatePrompt,
-                        args=[validation_input],
-                        schedule_to_close_timeout=LLM_ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT,
-                        start_to_close_timeout=LLM_ACTIVITY_START_TO_CLOSE_TIMEOUT,
-                        retry_policy=RetryPolicy(
-                            initial_interval=timedelta(seconds=5), backoff_coefficient=1
-                        ),
-                    )
-
-                    # If validation fails, provide that feedback to the user - i.e., "your words make no sense, puny human" end this iteration of processing
-                    if not validation_result.validationResult:
-                        workflow.logger.warning(
-                            f"Prompt validation failed: {validation_result.validationFailedReason}"
-                        )
-                        self.add_message(
-                            "agent", validation_result.validationFailedReason
-                        )
-                        continue
+                    # First user message of the session drives intent decomposition.
+                    # Captured exactly once; subsequent prompts append to history
+                    # but do NOT overwrite the session goal (per spec R10).
+                    if not self.session_prompt:
+                        self.session_prompt = prompt
 
                 # If valid, proceed with generating the context and prompt
+                active_intent_body = (
+                    _INTENT_REGISTRY[self.active_intent].body_md
+                    if self.active_intent and self.active_intent in _INTENT_REGISTRY
+                    else None
+                )
                 context_instructions = generate_genai_prompt(
                     agent_goal=self.goal,
                     conversation_history=self.conversation_history,
                     multi_goal_mode=self.multi_goal_mode,
                     raw_json=self.tool_data,
                     mcp_tools_info=self.mcp_tools_info,
+                    active_intent_id=self.active_intent,
+                    active_intent_body=active_intent_body,
+                    completed_intents=self.completed_intents,
+                    session_prompt=self.session_prompt,
                 )
 
+                # Build the per-call enum of valid tool names so the model
+                # cannot hallucinate (see plan_next_action enum constraint).
+                allowed_tool_names = sorted({tool.name for tool in self.goal.tools})
+                if self.mcp_tools_info and self.mcp_tools_info.get("success"):
+                    allowed_tool_names = sorted(
+                        set(allowed_tool_names)
+                        | set((self.mcp_tools_info.get("tools") or {}).keys())
+                    )
+
+                allowed_intent_ids = sorted(_INTENT_REGISTRY.keys())
+
                 prompt_input = ToolPromptInput(
-                    prompt=prompt, context_instructions=context_instructions
+                    prompt=prompt,
+                    context_instructions=context_instructions,
+                    allowed_tool_names=allowed_tool_names,
+                    allowed_intent_ids=allowed_intent_ids,
                 )
 
                 # connect to LLM and execute to get next steps
@@ -176,6 +211,17 @@ class AgentGoalWorkflow:
                 # process the tool as dictated by the prompt response - what to do next, and with which tool
                 next_step = tool_data.get("next")
                 current_tool = tool_data.get("tool")
+
+                # Intent layer (specs/004-nav-graph-intents): the planner's
+                # active_intent is the authoritative source of which intent is
+                # active this turn. Update workflow state so queries reflect it.
+                new_active_intent = tool_data.get("active_intent")
+                if new_active_intent and new_active_intent in _INTENT_REGISTRY:
+                    if new_active_intent != self.active_intent:
+                        workflow.logger.info(
+                            f"intent transition: {self.active_intent} -> {new_active_intent}"
+                        )
+                        self.active_intent = new_active_intent
 
                 workflow.logger.info(
                     f"next_step: {next_step}, current tool is {current_tool}"
@@ -201,16 +247,68 @@ class AgentGoalWorkflow:
                         self.confirmed = True
                 # else if the next step is to pick a new goal, set that to be the goal
                 elif next_step == "pick-new-goal":
-                    workflow.logger.info("All steps completed. Resetting goal.")
-                    self.change_goal("goal_choose_agent_type")
+                    # Guard: reject pick-new-goal if no tools from the current
+                    # goal have run since the last switch. The LLM occasionally
+                    # emits pick-new-goal right after ChangeGoal lands ("yay, I
+                    # switched!"), which is wrong — the new goal's phases have
+                    # not yet started.
+                    progress = (
+                        len(self.tool_results)
+                        - self.tool_results_count_at_last_goal_change
+                    )
+                    if progress < 1 and self.goal.id != "goal_choose_agent_type":
+                        workflow.logger.warning(
+                            f"Suppressing pick-new-goal: 0 tools from {self.goal.id} "
+                            f"have run since switch. Re-prompting LLM to start the "
+                            f"goal's phases instead."
+                        )
+                        self.prompt_queue.append(
+                            "### Correction: do NOT emit `pick-new-goal` yet. You just "
+                            "switched into this goal and have not run any of its phases. "
+                            "Read the goal description's first phase and emit "
+                            "`next='confirm'` with that phase's tool."
+                        )
+                    else:
+                        workflow.logger.info("All steps completed. Resetting goal.")
+                        self.change_goal("goal_choose_agent_type")
 
                 # else if the next step is to be done with the conversation such as if the user requests it via asking to "end conversation"
                 elif next_step == "done":
                     self.add_message("agent", tool_data)
 
-                    # here we could send conversation to AI for analysis
+                    # Intent-level done: an intent reports completion; the session
+                    # continues until either intent_report is the completing one
+                    # OR no intent is active (session-level done).
+                    if self.active_intent and self.active_intent != "intent_report":
+                        if self.active_intent not in self.completed_intents:
+                            self.completed_intents.append(self.active_intent)
+                        completed = self.active_intent
+                        workflow.logger.info(f"intent completed: {completed}")
+                        self.active_intent = None
+                        # Re-prompt the LLM to pick the next active_intent. This
+                        # lands as a "###"-tagged message so it does not become
+                        # part of the user-visible conversation history.
+                        self.prompt_queue.append(
+                            f"### Intent '{completed}' marked complete. "
+                            f"Pick the next active_intent from the registry, or emit "
+                            f"next='done' with active_intent=intent_report (or null) "
+                            f"to wrap up the session."
+                        )
+                        await helpers.continue_as_new_if_needed(
+                            self.conversation_history,
+                            self.prompt_queue,
+                            self.goal,
+                            MAX_TURNS_BEFORE_CONTINUE,
+                            self.add_message,
+                        )
+                        continue
 
-                    # end the workflow
+                    # Session-level done: no active intent OR intent_report just
+                    # completed. End the workflow and return history.
+                    if self.active_intent == "intent_report":
+                        if self.active_intent not in self.completed_intents:
+                            self.completed_intents.append(self.active_intent)
+                        self.active_intent = None
                     return str(self.conversation_history)
 
                 self.add_message("agent", tool_data)
@@ -281,6 +379,80 @@ class AgentGoalWorkflow:
         """Query handler to retrieve the latest tool data response if available."""
         return self.tool_data
 
+    @workflow.query
+    def get_observation_log(self) -> List[Dict[str, Any]]:
+        """Query handler: every observer observation emitted in this run.
+
+        See specs/003-observer-framework/spec.md (FR-021). Returns [] in
+        phase 0 (registry empty); phase 1+ populates per-tick.
+        """
+        return list(self.observation_log)
+
+    @workflow.query
+    def get_session_prompt(self) -> str:
+        """Query handler: the user's first non-tagged prompt of the session.
+
+        Drives intent decomposition. Captured exactly once at the start of the
+        workflow; subsequent user messages do not overwrite it (specs/004 R10).
+        """
+        return self.session_prompt
+
+    @workflow.query
+    def get_active_intent(self) -> Optional[str]:
+        """Query handler: the currently-active intent id, or None.
+
+        Set from each planner turn's tool_data["active_intent"]. None means
+        either the session has just started, an intent just completed, or the
+        LLM emitted active_intent=null.
+        """
+        return self.active_intent
+
+    @workflow.query
+    def get_completed_intents(self) -> List[str]:
+        """Query handler: ordered list of intent ids the LLM has marked complete.
+
+        Append-only within a session; an intent appears at most once.
+        """
+        return list(self.completed_intents)
+
+    @workflow.query
+    def get_pending_observations(self) -> List[Dict[str, Any]]:
+        """Query handler: observations queued for the next planner turn.
+
+        Cleared after each planner LLM call consumes them (phase 1+).
+        """
+        return list(self.pending_observations)
+
+    @workflow.query
+    def get_session_summary(self) -> Dict[str, Any]:
+        """Query handler: rolled-up session view for the React UI / GitHub bot.
+
+        Lists the goal, observer hits, max severity, and feature spec ids
+        verified so far. Phase 0 returns the goal id and empty rollups.
+        """
+        observer_hits: List[str] = []
+        feature_specs_verified: List[str] = []
+        severity_max = "info"
+        severity_rank = {"info": 0, "warn": 1, "bug": 2}
+        for obs in self.observation_log:
+            oid = obs.get("observer_id")
+            if oid and oid not in observer_hits:
+                observer_hits.append(oid)
+            spec = obs.get("spec_link")
+            if spec and spec not in feature_specs_verified:
+                feature_specs_verified.append(spec)
+            sev = obs.get("severity", "info")
+            if severity_rank.get(sev, 0) > severity_rank.get(severity_max, 0):
+                severity_max = sev
+        return {
+            "goal_id": getattr(self.goal, "id", None),
+            "observer_hits": observer_hits,
+            "severity_max": severity_max,
+            "feature_specs_verified": feature_specs_verified,
+            "observation_count": len(self.observation_log),
+            "pending_count": len(self.pending_observations),
+        }
+
     def add_message(self, actor: str, response: Union[str, Dict[str, Any]]) -> None:
         """Add a message to the conversation history.
 
@@ -302,17 +474,28 @@ class AgentGoalWorkflow:
         """Change the goal (usually on request of the user).
 
         Args:
-            goal: goal to change to)
+            goal: goal id to change to (e.g. 'goal_casino_session')
         """
-        if goal is not None:
-            for listed_goal in goal_list:
-                if listed_goal.id == goal:
-                    self.goal = listed_goal
-                    workflow.logger.info("Changed goal to " + goal)
-            if goal is None:
-                workflow.logger.warning(
-                    "Goal not set after goal reset, probably bad."
-                )  # if this happens, there's probably a problem with the goal list
+        if not goal:
+            workflow.logger.warning("change_goal called with empty/None goal id")
+            return
+
+        for listed_goal in goal_list:
+            if listed_goal.id == goal:
+                self.goal = listed_goal
+                # Snapshot tool-result count so we can detect "the LLM emitted
+                # pick-new-goal but didn't actually run any of the new goal's
+                # phases" (see the pick-new-goal handler in run()).
+                self.tool_results_count_at_last_goal_change = len(self.tool_results)
+                workflow.logger.info(
+                    f"Changed goal to {goal} "
+                    f"(tool_results_at_switch={self.tool_results_count_at_last_goal_change})"
+                )
+                return
+
+        workflow.logger.warning(
+            f"change_goal: '{goal}' not found in goal_list; current goal unchanged"
+        )
 
     # workflow function that defines if chat should end
     def chat_should_end(self) -> bool:
@@ -376,6 +559,7 @@ class AgentGoalWorkflow:
             self.add_message,
             self.prompt_queue,
             self.goal,
+            self.multi_goal_mode,
         )
 
         # set new goal if we should
@@ -391,7 +575,59 @@ class AgentGoalWorkflow:
                 and self.goal.id != "goal_choose_agent_type"
             ):
                 self.change_goal("goal_choose_agent_type")
+
+        # Observer framework tick (specs/003-observer-framework, FR-006).
+        # Per FR-027 this MUST NEVER halt the goal loop — any failure is
+        # caught here and the run continues. The activity itself also
+        # swallows internal failures; this is belt-and-suspenders.
+        await self._run_observer_tick(current_tool)
+
         return waiting_for_confirm
+
+    async def _run_observer_tick(self, current_tool: Optional[str]) -> None:
+        """Fire run_observers for the latest tool result. Never raises."""
+        try:
+            last_result: Dict[str, Any] = (
+                self.tool_results[-1] if self.tool_results else {}
+            )
+            if not isinstance(last_result, dict):
+                last_result = {"raw": str(last_result)}
+            last_args = (
+                self.tool_data.get("args", {}) if isinstance(self.tool_data, dict) else {}
+            )
+            last_success = bool(last_result.get("success", True))
+            last_error = last_result.get("error")
+            obs_payload = {
+                "run_id": workflow.info().run_id,
+                "goal_id": getattr(self.goal, "id", "") or "",
+                "last_tool_name": current_tool,
+                "last_tool_args": last_args,
+                "last_tool_result": last_result,
+                "last_tool_success": last_success,
+                "last_tool_error": last_error,
+                "seen_signatures": list(self.seen_signatures),
+            }
+            obs_out = await workflow.execute_activity(
+                run_observers,
+                obs_payload,
+                start_to_close_timeout=timedelta(seconds=15),
+                retry_policy=RetryPolicy(
+                    initial_interval=timedelta(seconds=2),
+                    maximum_attempts=2,
+                ),
+            )
+            new_obs = obs_out.get("observations") or []
+            if new_obs:
+                self.observation_log.extend(new_obs)
+                workflow.logger.info(
+                    f"observer tick: {len(new_obs)} observation(s) from tool={current_tool}"
+                )
+            new_sig = obs_out.get("new_signature")
+            if new_sig and new_sig not in self.seen_signatures:
+                self.seen_signatures.append(new_sig)
+        except Exception as e:                                          # noqa: BLE001
+            # FR-027: observer machinery must never halt the goal.
+            workflow.logger.warning(f"observer tick swallowed failure: {e}")
 
     # debugging helper - drop this in various places in the workflow to get status
     # also don't forget you can look at the workflow itself and do queries if you want
@@ -423,7 +659,7 @@ class AgentGoalWorkflow:
         mcp_tools_result = await workflow.execute_activity(
             mcp_list_tools,
             args=[self.goal.mcp_server_definition, include_tools],
-            start_to_close_timeout=LLM_ACTIVITY_START_TO_CLOSE_TIMEOUT,
+            start_to_close_timeout=MCP_TOOL_ACTIVITY_START_TO_CLOSE_TIMEOUT,
             retry_policy=RetryPolicy(
                 initial_interval=timedelta(seconds=5), backoff_coefficient=1
             ),

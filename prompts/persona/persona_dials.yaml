@@ -1,0 +1,14 @@
+# Persona dials for the Casino QA Agent.
+#
+# These gate observer sub-flow execution and inform goal-level risk
+# choices. They are DATA, not prompt — edit this file to change the
+# agent's player profile. Loaded once per session at worker start.
+#
+# See specs/003-observer-framework/spec.md (FR-025, FR-026).
+
+curiosity: high               # high = sub_flow on novel observers; low = log only
+risk_appetite: low            # low | med | high — informs stake sizing
+jackpot_optin: true           # default opt-in for QA coverage of FanCash Jackpots
+max_session_loss_usd: 5       # responsible-gaming guardrail per session
+react_to_wins: true           # emit excited line in the session report on a win
+explore_unknown_icons: true   # probe sub_flow when novelty == true

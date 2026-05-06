@@ -5,6 +5,7 @@ from typing import Optional
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from temporalio.api.enums.v1 import WorkflowExecutionStatus
 from temporalio.client import Client
 from temporalio.exceptions import TemporalError
@@ -46,9 +47,54 @@ app.add_middleware(
 )
 
 
+SCREENSHOTS_DIR = os.path.join(os.getcwd(), "screenshots")
+SCREENSHOT_EXTS = {".png", ".jpg", ".jpeg"}
+
+
 @app.get("/")
 def root():
     return {"message": "Temporal AI Agent!"}
+
+
+@app.get("/screenshots")
+def list_screenshots(limit: int = 50):
+    """List captured screenshots, newest first."""
+    if not os.path.isdir(SCREENSHOTS_DIR):
+        return {"screenshots": []}
+
+    entries = []
+    for name in os.listdir(SCREENSHOTS_DIR):
+        ext = os.path.splitext(name)[1].lower()
+        if ext not in SCREENSHOT_EXTS:
+            continue
+        path = os.path.join(SCREENSHOTS_DIR, name)
+        try:
+            stat = os.stat(path)
+        except OSError:
+            continue
+        entries.append({
+            "filename": name,
+            "mtime": stat.st_mtime,
+            "size": stat.st_size,
+        })
+
+    entries.sort(key=lambda e: e["mtime"], reverse=True)
+    return {"screenshots": entries[:limit]}
+
+
+@app.get("/screenshots/{filename}")
+def get_screenshot(filename: str):
+    """Serve a screenshot file by name."""
+    if "/" in filename or "\\" in filename or filename.startswith("."):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in SCREENSHOT_EXTS:
+        raise HTTPException(status_code=400, detail="Unsupported file type")
+    path = os.path.join(SCREENSHOTS_DIR, filename)
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="Screenshot not found")
+    media_type = "image/png" if ext == ".png" else "image/jpeg"
+    return FileResponse(path, media_type=media_type)
 
 
 @app.get("/tool-data")
@@ -205,7 +251,18 @@ async def start_workflow():
 
     workflow_id = "agent-workflow"
 
-    # Start the workflow with the starter prompt from the goal
+    # Terminate any existing workflow so we get a clean conversation history
+    try:
+        handle = temporal_client.get_workflow_handle(workflow_id)
+        desc = await handle.describe()
+        if desc.status == WorkflowExecutionStatus.WORKFLOW_EXECUTION_STATUS_RUNNING:
+            await handle.terminate(reason="Restarting with fresh workflow")
+            # Brief pause to let Temporal process the termination
+            await asyncio.sleep(0.5)
+    except Exception:
+        pass  # No existing workflow, that's fine
+
+    # Start a fresh workflow with the starter prompt from the goal
     await temporal_client.start_workflow(
         AgentGoalWorkflow.run,
         combined_input,
