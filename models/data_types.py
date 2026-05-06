@@ -30,6 +30,11 @@ class ToolPromptInput:
     # cannot hallucinate tool names like "ToolActivities.agent_toolPlanner".
     # Passing None or [] means no enum is applied (free-form string).
     allowed_tool_names: Optional[List[str]] = None
+    # Closed-set enum for plan_next_action's `active_intent` field (feature 004).
+    # When non-empty, the planner schema gains `active_intent` constrained to
+    # this list so the LLM cannot hallucinate an unregistered intent id.
+    # None / [] means no active_intent field on the schema (back-compat).
+    allowed_intent_ids: Optional[List[str]] = None
 
 
 @dataclass

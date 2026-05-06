@@ -1,8 +1,25 @@
 import asyncio
+import logging
 import os
 
 from ._deps import get_mcp_manager, get_screen_db
 from .detect_screen import detect_screen
+
+log = logging.getLogger(__name__)
+
+
+def _record_transition_safely(db, **kwargs) -> None:
+    """Wrap record_transition_observation in a try/except so any DB write
+    error logs a warning and continues — the goal loop must never halt on
+    auto-record failure (FR-027)."""
+    try:
+        db.record_transition_observation(**kwargs)
+    except Exception as e:  # noqa: BLE001 — failure-tolerant by contract
+        log.warning(
+            "record_transition_observation: failed (from=%s verb=%s target=%s to=%s): %s",
+            kwargs.get("from_screen"), kwargs.get("intent_verb"),
+            kwargs.get("intent_target"), kwargs.get("to_screen"), e,
+        )
 
 
 async def smart_tap(args: dict) -> dict:
@@ -93,7 +110,18 @@ async def smart_tap(args: dict) -> dict:
             # ── 5. UPDATE DB ─────────────────────────────────────────
             db.record_tap_result(profile_id, app_context, screen_name, element_name, verified)
 
-            if not verified:
+            # ── 6. AUTO-RECORD TRANSITION (MW-1, FR-017) ─────────────
+            if verified:
+                _record_transition_safely(
+                    db,
+                    from_screen=screen_name,
+                    intent_verb="tap",
+                    intent_target=element_name,
+                    to_screen=current_screen,
+                    success=True,
+                    app_context=app_context,
+                )
+            else:
                 db.log_observation(
                     device_profile_id=profile_id,
                     screen_name=screen_name,
@@ -102,6 +130,28 @@ async def smart_tap(args: dict) -> dict:
                     expected_result=f"transition to {expected_screen or 'next screen'}",
                     actual_result=f"still on {current_screen}",
                 )
+                # Verified divergence: decrement the expected (wrong) edge
+                # and upsert the actual edge as a competing transition.
+                if expected_screen and current_screen != expected_screen:
+                    _record_transition_safely(
+                        db,
+                        from_screen=screen_name,
+                        intent_verb="tap",
+                        intent_target=element_name,
+                        to_screen=expected_screen,
+                        success=False,
+                        app_context=app_context,
+                    )
+                    if current_screen and current_screen != "unknown":
+                        _record_transition_safely(
+                            db,
+                            from_screen=screen_name,
+                            intent_verb="tap",
+                            intent_target=element_name,
+                            to_screen=current_screen,
+                            success=True,
+                            app_context=app_context,
+                        )
         else:
             # Detection failed — still record the tap attempt
             db.record_tap_result(profile_id, app_context, screen_name, element_name, False)
@@ -109,6 +159,17 @@ async def smart_tap(args: dict) -> dict:
     else:
         # Graduated element — record success optimistically
         db.record_tap_result(profile_id, app_context, screen_name, element_name, True)
+        # Optimistic transition write: trust the expected_screen if provided
+        if expected_screen:
+            _record_transition_safely(
+                db,
+                from_screen=screen_name,
+                intent_verb="tap",
+                intent_target=element_name,
+                to_screen=expected_screen,
+                success=True,
+                app_context=app_context,
+            )
 
     return {
         "success": verified if verified is not None else True,
@@ -119,4 +180,6 @@ async def smart_tap(args: dict) -> dict:
         "verified": verified,
         "current_screen": current_screen,
         "expected_screen": expected_screen,
+        "from_screen": screen_name,
+        "actual_screen": current_screen,
     }

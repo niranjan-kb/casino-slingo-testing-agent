@@ -51,14 +51,33 @@ def generate_genai_prompt(
     multi_goal_mode: bool,
     raw_json: Optional[str] = None,
     mcp_tools_info: Optional[dict] = None,
+    active_intent_id: Optional[str] = None,
+    active_intent_body: Optional[str] = None,
+    completed_intents: Optional[List[str]] = None,
+    session_prompt: Optional[str] = None,
 ) -> str:
-    """Build the system-message text for the toolPlanner LLM call."""
+    """Build the system-message text for the toolPlanner LLM call.
+
+    The intent-layer parameters (specs/004-nav-graph-intents) inject the active
+    intent's body and a short status header (session prompt, completed intents)
+    so the LLM has per-turn context about what it is currently driving toward.
+    """
     sections: List[str] = []
 
     # 1. Goal — the long-form persona + identity + phase logic
     sections.append(
         f"# {agent_goal.agent_name}\n\n{agent_goal.description}"
     )
+
+    # 1a. Intent layer — active intent body and session header (specs/004).
+    intent_section = _format_intent_section(
+        active_intent_id=active_intent_id,
+        active_intent_body=active_intent_body,
+        completed_intents=completed_intents or [],
+        session_prompt=session_prompt or "",
+    )
+    if intent_section:
+        sections.append(intent_section)
 
     # 2. Tools — single canonical listing (the upstream listed twice).
     sections.append(_format_tools(agent_goal, mcp_tools_info))
@@ -91,6 +110,37 @@ def generate_genai_prompt(
 
 
 # ----- Section builders ----------------------------------------------------
+
+
+def _format_intent_section(
+    *,
+    active_intent_id: Optional[str],
+    active_intent_body: Optional[str],
+    completed_intents: List[str],
+    session_prompt: str,
+) -> str:
+    """Render the active-intent block. Returns '' when no intent context is supplied."""
+    if not (active_intent_id or active_intent_body or session_prompt or completed_intents):
+        return ""
+    lines: List[str] = ["## Active intent"]
+    if session_prompt:
+        lines.append(f"**Session prompt** (the user's high-level ask): {session_prompt}")
+    if completed_intents:
+        lines.append(
+            "**Completed intents this session**: " + ", ".join(completed_intents)
+        )
+    if active_intent_id:
+        lines.append(f"**Active intent**: `{active_intent_id}`")
+    if active_intent_body:
+        lines.append("")
+        lines.append(active_intent_body.strip())
+    lines.append("")
+    lines.append(
+        "Emit `active_intent` on every plan_next_action call. Switch it when "
+        "the prior intent is done; emit next='done' with active_intent set to "
+        "the just-completed intent to mark intent-level completion."
+    )
+    return "\n\n".join(lines)
 
 
 def _format_tools(agent_goal: AgentGoal, mcp_tools_info: Optional[dict]) -> str:

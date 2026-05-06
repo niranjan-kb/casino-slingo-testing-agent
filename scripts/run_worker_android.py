@@ -19,6 +19,12 @@ print(f"Agent goal: {os.environ['AGENT_GOAL']}")
 # Imports after env setup so shared.config reads the correct TEMPORAL_TASK_QUEUE
 from temporalio.worker import Worker  # noqa: E402
 
+from activities.intent_activity import (  # noqa: E402
+    find_games_for_intent,
+    get_play_loop,
+    list_intent_registry_summary,
+    set_screen_db as set_intent_screen_db,
+)
 from activities.observer_activity import (  # noqa: E402
     run_observers,
     set_persona as set_observer_persona,
@@ -106,6 +112,14 @@ async def main():
         f"max_loss=${persona_dials.max_session_loss_usd}"
     )
 
+    # Intent layer wiring (specs/004-nav-graph-intents). The registry is loaded
+    # at workflow-module import time (replay-safe pattern); intent_activity
+    # provides DB-backed helpers (catalog lookup, play_loop fetch).
+    set_intent_screen_db(screen_db)
+    from intents import load_registry  # noqa: E402
+    intent_count = len(load_registry())
+    print(f"Intent layer: {intent_count} intents in registry")
+
     client = await get_temporal_client()
     activities = ToolActivities(mcp_client_manager)
 
@@ -126,6 +140,9 @@ async def main():
                     dynamic_tool_activity,
                     mcp_list_tools,
                     run_observers,
+                    find_games_for_intent,
+                    get_play_loop,
+                    list_intent_registry_summary,
                 ],
                 activity_executor=activity_executor,
             )

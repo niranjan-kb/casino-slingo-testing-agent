@@ -15,8 +15,91 @@ from __future__ import annotations
 import heapq
 import itertools
 import json
+import os
 from collections import deque
+from datetime import datetime
 from typing import Any, Dict, List, Optional
+
+
+def _days_between(iso_ts: Optional[str], now: Optional[datetime] = None) -> float:
+    """Days between an ISO timestamp string and `now` (utc).
+
+    Returns 0.0 on parse failure or when `iso_ts` is None — i.e. unknown
+    staleness is treated as fresh (no penalty), matching MW-3's read-only
+    posture: we never destructively penalize rows we can't date.
+    """
+    if not iso_ts:
+        return 0.0
+    try:
+        ts = datetime.fromisoformat(iso_ts)
+    except (TypeError, ValueError):
+        return 0.0
+    base = now or datetime.utcnow()
+    return max(0.0, (base - ts).total_seconds() / 86400.0)
+
+
+def _effective_confidence(
+    row: Dict[str, Any],
+    *,
+    current_build_env: Optional[str] = None,
+    current_app_package: Optional[str] = None,
+    staleness_days_window: int = 30,
+    now: Optional[datetime] = None,
+) -> float:
+    """Compute read-time-decayed confidence (MW-3, R5/R6).
+
+    Stored confidence is never modified. Build/package mismatch multiplies
+    by 0.5; rows older than the staleness window get a soft linear ramp
+    (floor 0.5) until 90 days post-window.
+    """
+    conf = float(row.get("confidence") or 0.0)
+    row_env = row.get("build_env") or "unknown"
+    row_pkg = row.get("app_package") or "unknown"
+    if current_build_env and row_env not in (current_build_env, "unknown"):
+        conf *= 0.5
+    if current_app_package and row_pkg not in (current_app_package, "unknown"):
+        conf *= 0.5
+    last_verified = row.get("last_verified")
+    days_stale = _days_between(last_verified, now=now)
+    if days_stale > staleness_days_window:
+        ramp = max(0.5, 1.0 - (days_stale - staleness_days_window) / 60.0)
+        conf *= ramp
+    return conf
+
+
+def _decayed_transitions_from(
+    db: Any,
+    from_screen: str,
+    *,
+    app_context: str,
+) -> List[Dict[str, Any]]:
+    """Wrapper around db.get_transitions_from that applies read-time decay.
+
+    Returns rows with their `confidence` field replaced by the decayed value;
+    the original confidence is preserved as `_stored_confidence` for callers
+    that want it. Sorted by decayed confidence descending so callers that
+    pick the top row continue to behave as before.
+    """
+    build_env = os.getenv("BUILD_ENV") or None
+    app_package = os.getenv("APP_PACKAGE") or None
+    try:
+        window = int(os.getenv("SCREEN_MAP_STALENESS_DAYS", "30"))
+    except (TypeError, ValueError):
+        window = 30
+    decayed: List[Dict[str, Any]] = []
+    for row in db.get_transitions_from(from_screen, app_context=app_context):
+        eff = _effective_confidence(
+            row,
+            current_build_env=build_env,
+            current_app_package=app_package,
+            staleness_days_window=window,
+        )
+        out = dict(row)
+        out["_stored_confidence"] = row.get("confidence")
+        out["confidence"] = eff
+        decayed.append(out)
+    decayed.sort(key=lambda r: r["confidence"], reverse=True)
+    return decayed
 
 
 def _normalize_step(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -75,7 +158,7 @@ def find_path(
             continue
         if neg_min_conf > best_neg_min.get(current, float("inf")):
             continue  # already reached this node with a better min-conf
-        for row in db.get_transitions_from(current, app_context=app_context):
+        for row in _decayed_transitions_from(db, current, app_context=app_context):
             if row["confidence"] < min_confidence:
                 continue
             nxt = row["to_screen"]
@@ -129,7 +212,7 @@ def all_reachable(
         current, depth = queue.popleft()
         if depth >= max_hops:
             continue
-        for row in db.get_transitions_from(current, app_context=app_context):
+        for row in _decayed_transitions_from(db, current, app_context=app_context):
             if row["confidence"] < min_confidence:
                 continue
             nxt = row["to_screen"]

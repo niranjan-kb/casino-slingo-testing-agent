@@ -18,6 +18,19 @@ from typing import Any, Dict, List, Optional, Tuple
 _DEFAULT_DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "screen_map.db")
 
 
+def _current_build_meta() -> Tuple[str, str]:
+    """Read the worker's BUILD_ENV / APP_PACKAGE from the env at write time.
+
+    Used to tag rows so read-time decay (screen_graph._effective_confidence)
+    can downweight rows from a different build/package without destructively
+    rewriting the stored confidence (MW-3).
+    """
+    return (
+        os.getenv("BUILD_ENV", "unknown"),
+        os.getenv("APP_PACKAGE", "unknown"),
+    )
+
+
 class ScreenMapDB:
     """Thread-safe SQLite wrapper for screen element coordinate storage."""
 
@@ -38,7 +51,17 @@ class ScreenMapDB:
     def _init_db(self) -> None:
         conn = self._get_conn()
         conn.executescript(_SCHEMA_SQL)
+        self._ensure_build_columns(conn)
         conn.commit()
+
+    def _ensure_build_columns(self, conn: sqlite3.Connection) -> None:
+        """Idempotent ALTER for the build_env / app_package columns added in feature 004."""
+        for table in ("screen_signatures", "screen_elements", "screen_transitions"):
+            cols = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+            if "build_env" not in cols:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN build_env TEXT DEFAULT 'unknown'")
+            if "app_package" not in cols:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN app_package TEXT DEFAULT 'unknown'")
 
     # ── Device Profiles ──────────────────────────────────────────────
 
@@ -155,12 +178,14 @@ class ScreenMapDB:
         confidence: float = 0.5,
     ) -> None:
         """Insert or update an element's coordinates."""
+        build_env, app_package = _current_build_meta()
         conn = self._get_conn()
         conn.execute(
             """INSERT INTO screen_elements
                    (device_profile_id, app_context, screen_name, element_name, x, y,
-                    element_type, intent, confidence, source, last_verified)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    element_type, intent, confidence, source, last_verified,
+                    build_env, app_package)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(device_profile_id, app_context, screen_name, element_name)
                DO UPDATE SET
                    x = excluded.x,
@@ -169,9 +194,12 @@ class ScreenMapDB:
                    intent = COALESCE(excluded.intent, intent),
                    confidence = excluded.confidence,
                    source = excluded.source,
-                   last_verified = excluded.last_verified""",
+                   last_verified = excluded.last_verified,
+                   build_env = excluded.build_env,
+                   app_package = excluded.app_package""",
             (device_profile_id, app_context, screen_name, element_name, x, y,
-             element_type, intent, confidence, source, datetime.utcnow().isoformat()),
+             element_type, intent, confidence, source, datetime.utcnow().isoformat(),
+             build_env, app_package),
         )
         conn.commit()
 
@@ -421,15 +449,18 @@ class ScreenMapDB:
     ) -> None:
         """Record a runtime observation of a transition. Bumps confidence on success."""
         args_json = json.dumps(intent_args) if intent_args else None
+        build_env, app_package = _current_build_meta()
         conn = self._get_conn()
         # Ensure the row exists (zero-confidence floor for first-seen).
         conn.execute(
             """INSERT OR IGNORE INTO screen_transitions
                    (from_screen, intent_verb, intent_target, intent_args_json,
-                    to_screen, app_context, confidence, source, last_verified)
-               VALUES (?, ?, ?, ?, ?, ?, 0.0, 'observed', ?)""",
+                    to_screen, app_context, confidence, source, last_verified,
+                    build_env, app_package)
+               VALUES (?, ?, ?, ?, ?, ?, 0.0, 'observed', ?, ?, ?)""",
             (from_screen, intent_verb, intent_target, args_json,
-             to_screen, app_context, datetime.utcnow().isoformat()),
+             to_screen, app_context, datetime.utcnow().isoformat(),
+             build_env, app_package),
         )
         # SQLite needs the IS-NULL trick for the intent_target match; we
         # collapse it via COALESCE into a sentinel string for comparison.
@@ -438,13 +469,16 @@ class ScreenMapDB:
                SET times_used = times_used + 1,
                    times_succeeded = times_succeeded + ?,
                    confidence = CAST(times_succeeded + ? AS REAL) / (times_used + 1),
-                   last_verified = ?
+                   last_verified = ?,
+                   build_env = ?,
+                   app_package = ?
                WHERE from_screen = ?
                  AND intent_verb = ?
                  AND COALESCE(intent_target, '') = COALESCE(?, '')
                  AND to_screen = ?
                  AND app_context = ?""",
             (int(success), int(success), datetime.utcnow().isoformat(),
+             build_env, app_package,
              from_screen, intent_verb, intent_target, to_screen, app_context),
         )
         conn.commit()
@@ -659,6 +693,115 @@ class ScreenMapDB:
         # LOW-RISK: everything else (search bar, grid cells, etc.)
         return confidence < 0.8 or times_used < 3
 
+    # ── Signature Proposals (MW-4 / FR-021..023) ──────────────────────
+    #
+    # When the unknown-screen observer fires for the same `unk:<hash>`
+    # signature ≥ 3 times across ≥ 2 distinct runs, scripts/scan_signature_proposals.py
+    # upserts a row here so a human (or LLM-with-context) can review and
+    # promote it into screen_signatures. Auto-promotion is forbidden.
+
+    def upsert_signature_proposal(
+        self,
+        signature_hash: str,
+        *,
+        occurrence_count: int,
+        distinct_runs: int,
+        candidate_name: Optional[str] = None,
+        top_text_signals: Optional[List[str]] = None,
+        top_id_signals: Optional[List[str]] = None,
+        last_seen_run_id: Optional[str] = None,
+    ) -> int:
+        """Insert a new pending proposal or refresh counts on an existing one.
+
+        Returns the proposal id. Status is preserved on update — accepted /
+        rejected proposals do not regress to pending if they re-fire.
+        """
+        conn = self._get_conn()
+        cursor = conn.execute(
+            """INSERT INTO signature_proposals
+                   (signature_hash, occurrence_count, distinct_runs,
+                    candidate_name, top_text_signals_json, top_id_signals_json,
+                    last_seen_run_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(signature_hash) DO UPDATE SET
+                   occurrence_count = excluded.occurrence_count,
+                   distinct_runs = excluded.distinct_runs,
+                   candidate_name = COALESCE(excluded.candidate_name, candidate_name),
+                   top_text_signals_json = COALESCE(excluded.top_text_signals_json, top_text_signals_json),
+                   top_id_signals_json = COALESCE(excluded.top_id_signals_json, top_id_signals_json),
+                   last_seen_run_id = COALESCE(excluded.last_seen_run_id, last_seen_run_id)""",
+            (
+                signature_hash, occurrence_count, distinct_runs, candidate_name,
+                json.dumps(top_text_signals) if top_text_signals else None,
+                json.dumps(top_id_signals) if top_id_signals else None,
+                last_seen_run_id,
+            ),
+        )
+        conn.commit()
+        if cursor.lastrowid:
+            return cursor.lastrowid
+        row = conn.execute(
+            "SELECT id FROM signature_proposals WHERE signature_hash = ?",
+            (signature_hash,),
+        ).fetchone()
+        return int(row["id"]) if row else 0
+
+    def list_signature_proposals(
+        self,
+        *,
+        status: Optional[str] = "pending",
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        conn = self._get_conn()
+        if status:
+            rows = conn.execute(
+                """SELECT * FROM signature_proposals
+                   WHERE status = ?
+                   ORDER BY occurrence_count DESC, proposed_at DESC LIMIT ?""",
+                (status, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT * FROM signature_proposals
+                   ORDER BY proposed_at DESC LIMIT ?""",
+                (limit,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def accept_signature_proposal(
+        self,
+        signature_hash: str,
+        accepted_screen_name: str,
+    ) -> bool:
+        """Mark a proposal accepted. Promotion into screen_signatures is a separate
+        operator step — this method only flips the status."""
+        conn = self._get_conn()
+        cursor = conn.execute(
+            """UPDATE signature_proposals
+               SET status = 'accepted',
+                   accepted_screen_name = ?,
+                   accepted_at = ?
+               WHERE signature_hash = ? AND status = 'pending'""",
+            (accepted_screen_name, datetime.utcnow().isoformat(), signature_hash),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+    def reject_signature_proposal(
+        self,
+        signature_hash: str,
+        reason: str,
+    ) -> bool:
+        conn = self._get_conn()
+        cursor = conn.execute(
+            """UPDATE signature_proposals
+               SET status = 'rejected', rejected_reason = ?
+               WHERE signature_hash = ? AND status = 'pending'""",
+            (reason, signature_hash),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
     def close(self) -> None:
         if hasattr(self._local, "conn") and self._local.conn:
             self._local.conn.close()
@@ -796,4 +939,23 @@ CREATE INDEX IF NOT EXISTS idx_observation_log_run
 
 CREATE INDEX IF NOT EXISTS idx_observation_log_observer
     ON observation_log(observer_id, severity);
+
+CREATE TABLE IF NOT EXISTS signature_proposals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    proposed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    signature_hash TEXT NOT NULL UNIQUE,             -- the unk:<hash> from observer
+    occurrence_count INTEGER NOT NULL,
+    distinct_runs INTEGER NOT NULL,
+    candidate_name TEXT,
+    top_text_signals_json TEXT,
+    top_id_signals_json TEXT,
+    last_seen_run_id TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',          -- pending | accepted | rejected
+    accepted_screen_name TEXT,
+    accepted_at TIMESTAMP,
+    rejected_reason TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_proposals_status
+    ON signature_proposals(status, proposed_at);
 """

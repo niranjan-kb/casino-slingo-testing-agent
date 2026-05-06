@@ -54,12 +54,20 @@ _persistent_mcp_manager: Optional[MCPClientManager] = None
 # prevents hallucinations like `tool="ToolActivities.agent_toolPlanner"`.
 
 
-def _build_plan_next_action_tool(allowed_tool_names: Optional[List[str]]) -> Dict[str, Any]:
+def _build_plan_next_action_tool(
+    allowed_tool_names: Optional[List[str]],
+    allowed_intent_ids: Optional[List[str]] = None,
+) -> Dict[str, Any]:
     """Build the plan_next_action schema with `tool` constrained to a per-call enum.
 
     `allowed_tool_names` should be every user-facing tool name the agent is
     allowed to call this turn (native tools + MCP tools). When None or empty,
     `tool` is left as a free-form string (development fallback).
+
+    `allowed_intent_ids` (specs/004-nav-graph-intents) — when non-empty, the
+    schema gains an `active_intent` field constrained to this enum so the
+    model literally cannot emit an unregistered intent id. None / [] keeps
+    the schema back-compat (no active_intent field at all).
     """
     if allowed_tool_names:
         # Anthropic JSON Schema doesn't permit `enum` on a `["string", "null"]`
@@ -85,6 +93,49 @@ def _build_plan_next_action_tool(allowed_tool_names: Optional[List[str]]) -> Dic
             ),
         }
 
+    properties: Dict[str, Any] = {
+        "next": {
+            "type": "string",
+            "enum": ["question", "confirm", "pick-new-goal", "done"],
+            "description": (
+                "What the orchestrator should do next. "
+                "'question' = ask the user for input via the `response` field. "
+                "'confirm' = run the named `tool` with `args`. "
+                "'pick-new-goal' = signal that the current goal is complete and a new one should be selected (multi-goal mode only). "
+                "'done' = end the conversation OR mark the active intent complete (intent layer)."
+            ),
+        },
+        "tool": tool_field,
+        "args": {
+            "type": "object",
+            "description": (
+                "Arguments for the named tool. Empty object {} when tool is null. "
+                "All values must match the tool's declared argument types and names."
+            ),
+            "additionalProperties": True,
+        },
+        "response": {
+            "type": "string",
+            "description": (
+                "Plain-text message shown to the user. May be a question (when next='question'), "
+                "a status update before running a tool (when next='confirm'), or a final summary (when next='done')."
+            ),
+        },
+    }
+    required = ["next", "response"]
+
+    if allowed_intent_ids:
+        properties["active_intent"] = {
+            "type": ["string", "null"],
+            "enum": [None, *sorted(set(allowed_intent_ids))],
+            "description": (
+                "Which intent is active for this turn. The closed-set registry "
+                "enum prevents hallucinating an unregistered intent id. Set to "
+                "null only when next='done' and you are wrapping up the session."
+            ),
+        }
+        required.append("active_intent")
+
     return {
         "type": "function",
         "function": {
@@ -95,36 +146,8 @@ def _build_plan_next_action_tool(allowed_tool_names: Optional[List[str]]) -> Dic
             ),
             "parameters": {
                 "type": "object",
-                "properties": {
-                    "next": {
-                        "type": "string",
-                        "enum": ["question", "confirm", "pick-new-goal", "done"],
-                        "description": (
-                            "What the orchestrator should do next. "
-                            "'question' = ask the user for input via the `response` field. "
-                            "'confirm' = run the named `tool` with `args`. "
-                            "'pick-new-goal' = signal that the current goal is complete and a new one should be selected (multi-goal mode only). "
-                            "'done' = end the conversation."
-                        ),
-                    },
-                    "tool": tool_field,
-                    "args": {
-                        "type": "object",
-                        "description": (
-                            "Arguments for the named tool. Empty object {} when tool is null. "
-                            "All values must match the tool's declared argument types and names."
-                        ),
-                        "additionalProperties": True,
-                    },
-                    "response": {
-                        "type": "string",
-                        "description": (
-                            "Plain-text message shown to the user. May be a question (when next='question'), "
-                            "a status update before running a tool (when next='confirm'), or a final summary (when next='done')."
-                        ),
-                    },
-                },
-                "required": ["next", "response"],
+                "properties": properties,
+                "required": required,
                 "additionalProperties": False,
             },
         },
@@ -255,9 +278,11 @@ class ToolActivities:
 
         # Build the planning tool with the goal's allowed tool names baked in
         # as an enum on the `tool` field. The model literally cannot hallucinate
-        # a tool name not on this list.
+        # a tool name not on this list. When the workflow passes intent ids,
+        # an `active_intent` enum is added by the same mechanism (specs/004).
         allowed_names = getattr(input, "allowed_tool_names", None) or []
-        plan_tool = _build_plan_next_action_tool(allowed_names)
+        allowed_intents = getattr(input, "allowed_intent_ids", None) or []
+        plan_tool = _build_plan_next_action_tool(allowed_names, allowed_intents)
 
         completion_kwargs = {
             "model": self.llm_model,
@@ -340,9 +365,11 @@ class ToolActivities:
         data.setdefault("tool", None)
         data.setdefault("args", {})
         data.setdefault("response", "")
+        data.setdefault("active_intent", None)
 
         activity.logger.info(
             f"Planned action: next={data['next']} tool={data['tool']} "
+            f"intent={data.get('active_intent')} "
             f"response={str(data.get('response', ''))[:160]!r}"
         )
         return data

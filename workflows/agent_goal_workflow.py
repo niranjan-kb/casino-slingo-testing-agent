@@ -23,9 +23,14 @@ with workflow.unsafe.imports_passed_through():
     from activities.observer_activity import run_observers
     from activities.tool_activities import ToolActivities, mcp_list_tools
     from goals import goal_list
+    from intents import load_registry as _load_intent_registry
     from models.data_types import CombinedInput, ToolPromptInput
     from prompt_engine.agent_prompt_generators import generate_genai_prompt
     from tools.tool_registry import create_mcp_tool_definitions
+
+# Loaded once per worker process at module import (mirrors goal_list pattern).
+# Replay-safe: same files on disk → same registry → same allowed_intent_ids.
+_INTENT_REGISTRY = _load_intent_registry()
 
 # Constants
 MAX_TURNS_BEFORE_CONTINUE = 250
@@ -75,6 +80,16 @@ class AgentGoalWorkflow:
         self.observation_log: List[Dict[str, Any]] = []
         self.pending_observations: List[Dict[str, Any]] = []
         self.seen_signatures: List[str] = []  # per-run novelty cache
+
+        # Intent layer state (specs/004-nav-graph-intents).
+        # session_prompt = the user's first non-tagged message (the high-level
+        # ask that drove this session). active_intent is set from each planner
+        # turn's tool_data. completed_intents grows when the LLM emits
+        # next='done' while an intent is active (intent-level done, not
+        # session-level).
+        self.session_prompt: str = ""
+        self.active_intent: Optional[str] = None
+        self.completed_intents: List[str] = []
 
     # see ../api/main.py#temporal_client.start_workflow() for how the input parameters are set
     @workflow.run
@@ -137,14 +152,28 @@ class AgentGoalWorkflow:
                 # Re-enable by restoring the agent_validatePrompt call here.
                 if self.is_user_prompt(prompt):
                     self.add_message("user", prompt)
+                    # First user message of the session drives intent decomposition.
+                    # Captured exactly once; subsequent prompts append to history
+                    # but do NOT overwrite the session goal (per spec R10).
+                    if not self.session_prompt:
+                        self.session_prompt = prompt
 
                 # If valid, proceed with generating the context and prompt
+                active_intent_body = (
+                    _INTENT_REGISTRY[self.active_intent].body_md
+                    if self.active_intent and self.active_intent in _INTENT_REGISTRY
+                    else None
+                )
                 context_instructions = generate_genai_prompt(
                     agent_goal=self.goal,
                     conversation_history=self.conversation_history,
                     multi_goal_mode=self.multi_goal_mode,
                     raw_json=self.tool_data,
                     mcp_tools_info=self.mcp_tools_info,
+                    active_intent_id=self.active_intent,
+                    active_intent_body=active_intent_body,
+                    completed_intents=self.completed_intents,
+                    session_prompt=self.session_prompt,
                 )
 
                 # Build the per-call enum of valid tool names so the model
@@ -156,10 +185,13 @@ class AgentGoalWorkflow:
                         | set((self.mcp_tools_info.get("tools") or {}).keys())
                     )
 
+                allowed_intent_ids = sorted(_INTENT_REGISTRY.keys())
+
                 prompt_input = ToolPromptInput(
                     prompt=prompt,
                     context_instructions=context_instructions,
                     allowed_tool_names=allowed_tool_names,
+                    allowed_intent_ids=allowed_intent_ids,
                 )
 
                 # connect to LLM and execute to get next steps
@@ -179,6 +211,17 @@ class AgentGoalWorkflow:
                 # process the tool as dictated by the prompt response - what to do next, and with which tool
                 next_step = tool_data.get("next")
                 current_tool = tool_data.get("tool")
+
+                # Intent layer (specs/004-nav-graph-intents): the planner's
+                # active_intent is the authoritative source of which intent is
+                # active this turn. Update workflow state so queries reflect it.
+                new_active_intent = tool_data.get("active_intent")
+                if new_active_intent and new_active_intent in _INTENT_REGISTRY:
+                    if new_active_intent != self.active_intent:
+                        workflow.logger.info(
+                            f"intent transition: {self.active_intent} -> {new_active_intent}"
+                        )
+                        self.active_intent = new_active_intent
 
                 workflow.logger.info(
                     f"next_step: {next_step}, current tool is {current_tool}"
@@ -233,9 +276,39 @@ class AgentGoalWorkflow:
                 elif next_step == "done":
                     self.add_message("agent", tool_data)
 
-                    # here we could send conversation to AI for analysis
+                    # Intent-level done: an intent reports completion; the session
+                    # continues until either intent_report is the completing one
+                    # OR no intent is active (session-level done).
+                    if self.active_intent and self.active_intent != "intent_report":
+                        if self.active_intent not in self.completed_intents:
+                            self.completed_intents.append(self.active_intent)
+                        completed = self.active_intent
+                        workflow.logger.info(f"intent completed: {completed}")
+                        self.active_intent = None
+                        # Re-prompt the LLM to pick the next active_intent. This
+                        # lands as a "###"-tagged message so it does not become
+                        # part of the user-visible conversation history.
+                        self.prompt_queue.append(
+                            f"### Intent '{completed}' marked complete. "
+                            f"Pick the next active_intent from the registry, or emit "
+                            f"next='done' with active_intent=intent_report (or null) "
+                            f"to wrap up the session."
+                        )
+                        await helpers.continue_as_new_if_needed(
+                            self.conversation_history,
+                            self.prompt_queue,
+                            self.goal,
+                            MAX_TURNS_BEFORE_CONTINUE,
+                            self.add_message,
+                        )
+                        continue
 
-                    # end the workflow
+                    # Session-level done: no active intent OR intent_report just
+                    # completed. End the workflow and return history.
+                    if self.active_intent == "intent_report":
+                        if self.active_intent not in self.completed_intents:
+                            self.completed_intents.append(self.active_intent)
+                        self.active_intent = None
                     return str(self.conversation_history)
 
                 self.add_message("agent", tool_data)
@@ -314,6 +387,33 @@ class AgentGoalWorkflow:
         phase 0 (registry empty); phase 1+ populates per-tick.
         """
         return list(self.observation_log)
+
+    @workflow.query
+    def get_session_prompt(self) -> str:
+        """Query handler: the user's first non-tagged prompt of the session.
+
+        Drives intent decomposition. Captured exactly once at the start of the
+        workflow; subsequent user messages do not overwrite it (specs/004 R10).
+        """
+        return self.session_prompt
+
+    @workflow.query
+    def get_active_intent(self) -> Optional[str]:
+        """Query handler: the currently-active intent id, or None.
+
+        Set from each planner turn's tool_data["active_intent"]. None means
+        either the session has just started, an intent just completed, or the
+        LLM emitted active_intent=null.
+        """
+        return self.active_intent
+
+    @workflow.query
+    def get_completed_intents(self) -> List[str]:
+        """Query handler: ordered list of intent ids the LLM has marked complete.
+
+        Append-only within a session; an intent appears at most once.
+        """
+        return list(self.completed_intents)
 
     @workflow.query
     def get_pending_observations(self) -> List[Dict[str, Any]]:
