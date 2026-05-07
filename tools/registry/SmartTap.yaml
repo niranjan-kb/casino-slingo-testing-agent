@@ -1,0 +1,20 @@
+# Per spec 005 §R2 (research). Tool registry side-car: declares which intents
+# and platforms this tool serves so the planner-prompt assembler can filter the
+# tool_choice enum per turn (FR-007 / R2).
+
+name: SmartTap
+platforms: [android]
+intents:
+  - intent_authenticate
+  - intent_navigate_to_screen
+  - intent_navigate_to_game
+  - intent_load_game_context
+  - intent_play_game
+  - intent_play_bonus
+  - intent_explore
+risk_tier: medium
+side_effects: [screen_transition, db_write]
+description: |
+  All-in-one map-first tap: lookup coords for current_screen+intent_target,
+  deterministic tap, wait for next signature, verify, update DB. Falls back
+  to LLM/visual on miss.

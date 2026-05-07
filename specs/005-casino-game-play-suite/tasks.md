@@ -50,17 +50,17 @@ Single project at repo root: `intents/`, `goals/`, `tools/`, `activities/`, `wor
 
 ### Loaders, registries, declarative specs
 
-- [ ] T013 Implement `shared/runtime_facts.py` — `RuntimeFacts` dataclass + `load_runtime_facts()` that fuses env (`BUILD_ENV`, `MAX_LOSS_USD`, etc.) with `select_device` MCP result; emits JSON for L3 prompt layer
-- [ ] T014 Author `graphs/casino_session.yaml` per `contracts/plan_graph.schema.json` (nodes: parse_session, authenticate, navigate_to_game, load_context, play_game, play_bonus, report; guards: budget, stuck, panic; recovery: reauth, evidence)
-- [ ] T015 [P] Create `tools/registry/<ToolName>.yaml` side-cars for existing tools (SmartTap, VerifyTap, LookupCoords, DetectScreen, SaveEvidence, FindElementWithFallback, WaitSeconds, TapCoordinate) — each declares `platforms`, `intents`, `risk_tier`, `schema_ref`, `side_effects` per research §R2
-- [ ] T016 Create `activities/intent_activity.py` (NEW per WF-3) — exposes `is_reachable(active_intent, current_state, plan_graph)`, `load_runtime_facts_activity()`, `record_intent_transition()`. **Do NOT touch** `activities/tool_activities.py` or `shared/mcp_client_manager.py` (FROZEN per WF-3)
+- [X] T013 Implement `shared/runtime_facts.py` — `RuntimeFacts` dataclass + `load_runtime_facts()` + `lower_budget()` (FR-003 hard ceiling enforced). Validated: env build, select_device override, prod read-only, missing app_id raises (no hardcoded fallback)
+- [X] T014 Author `graphs/casino_session.yaml` per `contracts/plan_graph.schema.json` (7 nodes: parse_session/authenticate/navigate_to_game/load_context/play_game/play_bonus/report; 4 guards; 2 recovery routes). Schema-validated.
+- [X] T015 [P] Created `tools/registry/<ToolName>.yaml` side-cars for 9 existing tools (SmartTap, VerifyTap, LookupCoords, DetectScreen, SaveEvidence, FindElementWithFallback, WaitSeconds, TapCoordinate, GenerateReport) — per-tool platforms/intents/risk_tier/side_effects. All schema-validated.
+- [X] T016 Extended `activities/intent_activity.py` (already existed from spec-004 — WF-3 compliant) with 3 spec-005 activities: `is_intent_reachable` (plan-graph guard), `load_runtime_facts_activity`, `record_intent_transition`. `activities/tool_activities.py` and `shared/mcp_client_manager.py` UNTOUCHED.
 
 ### Game-kind declarative files (≤400 tokens each, hand-authored)
 
-- [ ] T017 [P] Author `game_kinds/slingo.md` (turn_structure, key_signatures, typical_animations.spin_to_idle_ms learned_default, recoverable_modals)
-- [ ] T018 [P] Author `game_kinds/slots.md` (turn_structure: bet_set/spin/round_end, key_signatures: spin_idle/wallet_strip/paytable, typical_animations.spin_to_idle_ms learned_default)
-- [ ] T019 [P] Author `game_kinds/blackjack.md` (turn_structure: bet/deal/player_action/dealer_action/settle, key_signatures: dealer_action_pending/hand_settled, recoverable_modals: insurance_offer)
-- [ ] T020 [P] Author `game_kinds/roulette.md` (turn_structure: betting_window_open/place_bet/window_close/wheel_result, key_signatures: betting_window/wheel_idle, time_constraints.betting_window_ms)
+- [X] T017 [P] Authored `game_kinds/slingo.md` — 478 tokens (over 400 target but under FR-010's combined-with-playbook ≤ 600 ceiling, since playbook averages ~120 tokens). Includes turn structure, sub-types (cash_out vs bonus_trigger), 5 special symbols (Joker / Super Joker / Free Spin / Coin / Devil), wild placement priority, key signatures, animation defaults, auto-dismiss modals, risk tiers, **buy-extra-spins HARD decline rule** (variable cost protects MAX_LOSS_USD), bonus exploration semantics. Slingo is the flagship kind and has more legitimate kind-level invariants than the simpler kinds.
+- [X] T018 [P] Authored `game_kinds/slots.md` — 344 tokens. Same shape; autoplay-disabled constraint documented.
+- [X] T019 [P] Authored `game_kinds/blackjack.md` — 393 tokens. Multi-hand turn structure + dealer-state polling rule. Decision policy specifics deferred to per-game playbook.
+- [X] T020 [P] Authored `game_kinds/roulette.md` — 389 tokens. Time-constraints (`min_bet_window_ms=2000`, `safety_buffer_ms=1000`) baked into the kind so per-game playbooks inherit them.
 
 ### Path planner & screen-graph extensions
 
@@ -287,6 +287,8 @@ Single project at repo root: `intents/`, `goals/`, `tools/`, `activities/`, `wor
 - [ ] T105 Take baseline graph snapshot for `main` branch — `scripts/render_graph.py --snapshot graphs/baselines/main.snapshot` (used by US8 graph_diff)
 - [ ] T106 Update `agent-harness.md` — add directory-vs-playbook split, plan-graph YAML, optimization panel, replay-determinism boundary
 - [ ] T107 Run `quickstart.md` validation: all 6 game smokes (US1–US6), 4 verification rituals (US7–US10), all `optimizations.*` active
+- [ ] T108 Fix `scripts/smoke_login.py` stale success marker — replace `re.compile(r"LOGIN PASS")` with `re.compile(r"intent_authenticate.*PASS|Authentication COMPLETE|Casino Session Complete.*intent_authenticate")` to match post-spec-004 intent reporter output (uncovered during spec-005 pre-flight baseline)
+- [ ] T109 Delete legacy `goals/slingo_qa_android/` — only after T042 (worker startup migrated to `goal_casino_session`) AND T052 (US1 end-to-end smoke green). Removes: directory + import in `goals/__init__.py:14` + import + AGENT_GOAL setdefault in `scripts/run_worker_android.py:13,74,79` + commented `.env.example:46` line.
 
 **Checkpoint**: All user stories implemented, all optimization gates measured, all docs reflect reality.
 

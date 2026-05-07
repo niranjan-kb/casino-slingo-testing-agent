@@ -1,0 +1,9 @@
+name: GenerateReport
+platforms: [android]
+intents:
+  - intent_report
+risk_tier: low
+side_effects: [report_write]
+description: |
+  Render the run-report markdown + JSON to reports/<date>-<run>.{md,json} per
+  contracts/run_report.schema.json. Session terminator.

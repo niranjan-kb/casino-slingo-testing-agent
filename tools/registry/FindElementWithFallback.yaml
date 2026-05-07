@@ -1,0 +1,15 @@
+name: FindElementWithFallback
+platforms: [android]
+intents:
+  - intent_authenticate
+  - intent_navigate_to_screen
+  - intent_navigate_to_game
+  - intent_load_game_context
+  - intent_play_game
+  - intent_play_bonus
+  - intent_explore
+risk_tier: low
+side_effects: [db_write]
+description: |
+  Try N (strategy, selector) candidates in one call; first hit wins. On hit,
+  caller-supplied coords are upserted into screen_elements per MW-2.

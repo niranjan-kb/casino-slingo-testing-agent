@@ -1,0 +1,15 @@
+name: LookupCoords
+platforms: [android]
+intents:
+  - intent_authenticate
+  - intent_navigate_to_screen
+  - intent_navigate_to_game
+  - intent_load_game_context
+  - intent_play_game
+  - intent_play_bonus
+  - intent_explore
+risk_tier: low
+side_effects: []
+description: |
+  Coordinate lookup from screen_elements for current_screen + intent_target.
+  Read-only; used by SmartTap and TapCoordinate.

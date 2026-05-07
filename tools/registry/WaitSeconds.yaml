@@ -1,0 +1,16 @@
+name: WaitSeconds
+platforms: [android]
+intents:
+  - intent_authenticate
+  - intent_navigate_to_screen
+  - intent_navigate_to_game
+  - intent_load_game_context
+  - intent_play_game
+  - intent_play_bonus
+  - intent_explore
+risk_tier: low
+side_effects: []
+description: |
+  Async sleep (max 30s). Legacy fixed-wait primitive — superseded by
+  WaitForSignature (learned-wait via animation_timings) for game-action waits
+  but still used for one-off settles where no signature exists.

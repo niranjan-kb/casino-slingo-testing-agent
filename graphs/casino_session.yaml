@@ -1,0 +1,76 @@
+# Plan graph for the casino-session goal.
+# Per spec 005 contracts/plan_graph.schema.json + research §R3 + scaling §8.
+#
+# Nodes are intents; edges are preconditions; guards are cross-cutting safety
+# checks; recovery routes handle session-level signals. The workflow loads this
+# at boot, re-checks reachability after every active_intent transition, and
+# rejects unreachable picks (falling back to the last-known reachable intent
+# with evidence saved). Replaces the prose "Phase N" blocks that used to bloat
+# every prompt turn — the agent's flow is now a YAML diff, not a Python diff.
+#
+# Anti-hardcoding mandate: no per-game branches, no per-build branches.
+# Adding a game = catalog + playbook rows, never a node here.
+
+nodes:
+  parse_session:
+    intent: intent_parse_session
+    terminal_on_fail: report
+
+  authenticate:
+    intent: intent_authenticate
+    requires: parse_session.success
+
+  navigate_to_game:
+    intent: intent_navigate_to_game
+    requires: authenticate.success
+    input_from: session_intent.target
+
+  load_context:
+    intent: intent_load_game_context
+    requires: navigate_to_game.success
+
+  play_game:
+    intent: intent_play_game
+    requires: load_context.success
+    repeat_until: budget.terminal
+
+  play_bonus:
+    intent: intent_play_bonus
+    trigger: bonus_trigger_signature
+    returns_to: play_game
+
+  report:
+    intent: intent_report
+    requires: any_terminal
+
+guards:
+  budget:
+    activity: BudgetCheck
+    after: each_play_round
+    terminate: true
+    route: report
+
+  stuck:
+    activity: SaveEvidence
+    after: 3_failures_same_screen
+    terminate: false
+
+  panic:
+    activity: SaveEvidence
+    after: 5_failures_same_screen
+    terminate: true
+    route: report
+
+  loop:
+    activity: BackOff
+    after: same_screen_5x_in_20_actions
+    terminate: false
+
+recovery:
+  reauth:
+    intent: intent_authenticate
+    trigger: session_lost
+
+  evidence:
+    intent: intent_report
+    trigger: panic
