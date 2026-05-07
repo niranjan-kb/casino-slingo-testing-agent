@@ -52,6 +52,7 @@ class ScreenMapDB:
         conn = self._get_conn()
         conn.executescript(_SCHEMA_SQL)
         self._ensure_build_columns(conn)
+        self._ensure_spec_005_columns(conn)
         conn.commit()
 
     def _ensure_build_columns(self, conn: sqlite3.Connection) -> None:
@@ -62,6 +63,58 @@ class ScreenMapDB:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN build_env TEXT DEFAULT 'unknown'")
             if "app_package" not in cols:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN app_package TEXT DEFAULT 'unknown'")
+
+    def _ensure_spec_005_columns(self, conn: sqlite3.Connection) -> None:
+        """Idempotent ALTERs for spec 005 (Casino Game-Play & Verification Suite).
+
+        Per data-model.md §7 (logical identity, parent_sig, dom_skeleton_hash, deprecated_at),
+        §9 (signature_proposals clustering + status lifecycle), and FR-027 (auto-demote bookkeeping
+        on screen_elements). All additions are non-destructive — existing rows get NULL/default.
+        """
+        sig_cols_to_add = (
+            ("logical_id", "TEXT"),
+            ("parent_sig", "TEXT"),
+            ("deprecated_at", "TIMESTAMP"),
+            ("dom_skeleton_hash", "TEXT"),
+        )
+        elem_cols_to_add = (
+            ("logical_id", "TEXT"),
+            ("risk_tier", "TEXT NOT NULL DEFAULT 'low'"),
+            ("side_effect", "TEXT NOT NULL DEFAULT 'idempotent'"),
+            ("consecutive_failures", "INTEGER NOT NULL DEFAULT 0"),
+            ("needs_review", "INTEGER NOT NULL DEFAULT 0"),
+        )
+        proposals_cols_to_add = (
+            ("dom_skeleton_hash", "TEXT"),
+            ("cluster_id", "TEXT"),
+            ("rejected_cooldown_until", "TIMESTAMP"),
+            ("evidence_path", "TEXT"),
+        )
+
+        for table, additions in (
+            ("screen_signatures", sig_cols_to_add),
+            ("screen_elements", elem_cols_to_add),
+            ("signature_proposals", proposals_cols_to_add),
+        ):
+            existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+            for col_name, col_type in additions:
+                if col_name not in existing:
+                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {col_name} {col_type}")
+
+        # SQL view for backward compatibility: legacy callers reading screen_transitions
+        # still see the top-observed end_sig per (start_sig, action) from transition_outcomes.
+        # The view name does NOT collide with the existing screen_transitions TABLE — we
+        # expose it under transition_top_outcome instead so old code paths are unaffected
+        # until they migrate explicitly.
+        conn.execute(
+            """CREATE VIEW IF NOT EXISTS transition_top_outcome AS
+               SELECT start_sig, action, end_sig, observed_count, last_seen, edge_kind, side_effect, precondition
+               FROM transition_outcomes o1
+               WHERE observed_count = (
+                   SELECT MAX(observed_count) FROM transition_outcomes o2
+                   WHERE o2.start_sig = o1.start_sig AND o2.action = o1.action
+               )"""
+        )
 
     # ── Device Profiles ──────────────────────────────────────────────
 
@@ -958,4 +1011,139 @@ CREATE TABLE IF NOT EXISTS signature_proposals (
 
 CREATE INDEX IF NOT EXISTS idx_proposals_status
     ON signature_proposals(status, proposed_at);
+
+-- ── Spec 005: Casino Game-Play & Verification Suite ──────────────────
+-- Per data-model.md §1–§9. All additions are additive and idempotent.
+-- The directory/playbook split, stochastic outcomes, frontier, learned
+-- waits, round telemetry, logical identity, and clustered proposals
+-- are kept as data — never as code branches.
+
+-- §1 Marquee: what's playable. Auto-discovered by lobby-walk.
+CREATE TABLE IF NOT EXISTS game_directory (
+    slug                    TEXT PRIMARY KEY,
+    display_name            TEXT NOT NULL,
+    kind                    TEXT NOT NULL,                  -- slingo|slots|blackjack|roulette|...
+    aliases_json            TEXT NOT NULL DEFAULT '[]',
+    popularity              INTEGER NOT NULL DEFAULT 0,
+    available               INTEGER NOT NULL DEFAULT 1,
+    loaded_signature        TEXT,
+    first_seen_in_lobby_at  TIMESTAMP,
+    last_seen_in_lobby_at   TIMESTAMP,
+    last_played_at          TIMESTAMP,
+    build_env               TEXT NOT NULL DEFAULT 'unknown',
+    app_version             TEXT NOT NULL DEFAULT 'unknown',
+    created_at              TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at              TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS ix_directory_kind        ON game_directory(kind);
+CREATE INDEX IF NOT EXISTS ix_directory_popularity  ON game_directory(popularity DESC, last_played_at DESC);
+
+-- §2 House rules: how to play this specific table. Auto-populated on first launch.
+CREATE TABLE IF NOT EXISTS game_playbook (
+    slug                       TEXT PRIMARY KEY REFERENCES game_directory(slug),
+    actions_json               TEXT NOT NULL DEFAULT '{}',
+    round_end_signature        TEXT,
+    balance_signature          TEXT,
+    balance_regex              TEXT,
+    bonus_trigger_signatures   TEXT NOT NULL DEFAULT '[]',
+    auto_dismiss_signatures    TEXT NOT NULL DEFAULT '[]',
+    recovery_json              TEXT NOT NULL DEFAULT '{}',
+    rules_json                 TEXT,
+    rules_observed_signature   TEXT,
+    build_env                  TEXT NOT NULL DEFAULT 'unknown',
+    app_version                TEXT NOT NULL DEFAULT 'unknown',
+    created_at                 TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at                 TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- §3 Walking the floor: per-screen frontier of (control × tried/untried).
+CREATE TABLE IF NOT EXISTS screen_action_frontier (
+    screen_sig         TEXT NOT NULL,
+    element_id         TEXT NOT NULL,
+    attempted_count    INTEGER NOT NULL DEFAULT 0,
+    succeeded_count    INTEGER NOT NULL DEFAULT 0,
+    last_attempted_at  TIMESTAMP,
+    side_effect        TEXT NOT NULL DEFAULT 'idempotent',  -- idempotent|reversible|destructive
+    PRIMARY KEY (screen_sig, element_id)
+);
+
+-- §4 Doors that lead to multiple rooms: 1-to-N transitions for stochastic outcomes.
+CREATE TABLE IF NOT EXISTS transition_outcomes (
+    start_sig        TEXT NOT NULL,
+    action           TEXT NOT NULL,
+    end_sig          TEXT NOT NULL,
+    observed_count   INTEGER NOT NULL DEFAULT 1,
+    last_seen        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    edge_kind        TEXT NOT NULL DEFAULT 'tap',          -- tap|back|system_back|swipe_*|longpress|type|scroll|deeplink
+    side_effect      TEXT NOT NULL DEFAULT 'idempotent',
+    precondition     TEXT,                                  -- JSON predicate over RuntimeFacts
+    PRIMARY KEY (start_sig, action, end_sig)
+);
+CREATE INDEX IF NOT EXISTS ix_outcomes_start_action ON transition_outcomes(start_sig, action, observed_count DESC);
+
+-- §5 The night's bets: per-round telemetry.
+CREATE TABLE IF NOT EXISTS game_rounds (
+    round_id                TEXT PRIMARY KEY,
+    workflow_id             TEXT NOT NULL,
+    game_slug               TEXT NOT NULL REFERENCES game_directory(slug),
+    started_at              TIMESTAMP NOT NULL,
+    ended_at                TIMESTAMP,
+    bet_amount              REAL,
+    balance_before          REAL,
+    balance_after           REAL,
+    outcome                 TEXT,                            -- win|loss|push|bonus_trigger|error|timeout
+    bonus_round_id          TEXT,
+    evidence_path           TEXT,
+    balance_read_attempts   INTEGER NOT NULL DEFAULT 1,
+    notes                   TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_rounds_workflow ON game_rounds(workflow_id);
+CREATE INDEX IF NOT EXISTS ix_rounds_slug     ON game_rounds(game_slug, started_at);
+
+-- §6 Learned waits: how long does a spin take? Per-(game, action, build, version), Welford's online stats.
+CREATE TABLE IF NOT EXISTS animation_timings (
+    game_slug    TEXT NOT NULL,
+    action       TEXT NOT NULL,
+    build_env    TEXT NOT NULL,
+    app_version  TEXT NOT NULL,
+    samples      INTEGER NOT NULL DEFAULT 0,
+    mean_ms      INTEGER,
+    m2_ms        REAL,                                       -- Welford's running M2 for online stddev
+    stddev_ms    INTEGER,
+    p95_ms       INTEGER,
+    PRIMARY KEY (game_slug, action, build_env, app_version)
+);
+
+-- §7 Stable identity across renovations: logical names that survive rehashes.
+CREATE TABLE IF NOT EXISTS logical_screens (
+    logical_id      TEXT PRIMARY KEY,                        -- e.g. "lobby_home", "slingo_base_grid"
+    canonical_name  TEXT NOT NULL,
+    description     TEXT,
+    is_hub          INTEGER NOT NULL DEFAULT 0,
+    staleness_days  INTEGER,                                 -- per-surface decay; null = env default
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS logical_elements (
+    logical_id        TEXT PRIMARY KEY,                      -- e.g. "spin_button", "search_bar"
+    canonical_label   TEXT NOT NULL,
+    default_risk_tier TEXT NOT NULL DEFAULT 'low',           -- HIGH for bet/spin/deposit/withdraw/sign-in
+    created_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- §8 Provenance: append-only log behind transition_outcomes; 90-day retention.
+CREATE TABLE IF NOT EXISTS transition_observations (
+    observation_id   INTEGER PRIMARY KEY AUTOINCREMENT,
+    workflow_id      TEXT NOT NULL,
+    ts               TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    start_sig        TEXT NOT NULL,
+    action           TEXT NOT NULL,
+    end_sig          TEXT NOT NULL,
+    build_env        TEXT NOT NULL,
+    app_version      TEXT NOT NULL,
+    outcome          TEXT NOT NULL,                          -- success|verify_fail|timeout|error
+    duration_ms      INTEGER
+);
+CREATE INDEX IF NOT EXISTS ix_obs_workflow ON transition_observations(workflow_id);
+CREATE INDEX IF NOT EXISTS ix_obs_pair     ON transition_observations(start_sig, action, ts);
 """

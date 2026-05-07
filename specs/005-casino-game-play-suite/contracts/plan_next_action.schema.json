@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "plan_next_action.schema.json",
+  "title": "PlanNextAction",
+  "description": "What the agent decides to do this turn. Anthropic tool-use forcing on the synthetic plan_next_action tool — the planner cannot emit anything else. Tool and active_intent enums are constrained per-call to the active goal's allowed tools and the loaded intent registry.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["next", "active_intent"],
+  "properties": {
+    "next": {
+      "type": "string",
+      "enum": ["confirm", "question", "pick-new-goal", "done"],
+      "description": "WF-1 contract: every turn lands in this closed-set decision surface. 'confirm' means execute a tool; 'done' terminates the active intent."
+    },
+    "tool": {
+      "type": "string",
+      "description": "Name of the tool to dispatch. Constrained per-turn to the intersection of (active_intent.allowed_tools, active_platform.driver_pack)."
+    },
+    "args": {
+      "type": "object",
+      "description": "Tool-specific arguments. Schema validated by the tool's own contract."
+    },
+    "response": {
+      "type": "string",
+      "description": "Free-text rationale or report content. Operational only — never re-fed into prompts."
+    },
+    "active_intent": {
+      "type": "string",
+      "enum": [
+        "intent_parse_session",
+        "intent_authenticate",
+        "intent_navigate_to_screen",
+        "intent_navigate_to_game",
+        "intent_load_game_context",
+        "intent_play_game",
+        "intent_play_bonus",
+        "intent_explore",
+        "intent_observe_rules",
+        "intent_report"
+      ],
+      "description": "The intent the agent says it is currently pursuing. Plan-graph reachability guard rejects unreachable picks."
+    },
+    "current_screen_signature": {
+      "type": "string",
+      "description": "What the agent thinks it's looking at. Cross-checked with DetectScreen output."
+    }
+  }
+}

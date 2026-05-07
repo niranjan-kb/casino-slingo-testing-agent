@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "run_report.schema.json",
+  "title": "RunReport",
+  "description": "What the agent leaves on the table at the end of a session. Both reports/<date>-<run>.json (this schema) and a rendered markdown sibling are produced.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["workflow_id", "started_at", "ended_at", "session_intent", "terminal_reason", "balance", "rounds", "intents", "optimizations", "operator_actions"],
+  "properties": {
+    "workflow_id": { "type": "string" },
+    "started_at":  { "type": "string", "format": "date-time" },
+    "ended_at":    { "type": "string", "format": "date-time" },
+    "build_env":   { "type": "string" },
+    "app_version": { "type": "string" },
+    "device":      { "type": "object", "additionalProperties": true },
+    "session_intent": { "$ref": "session_intent.schema.json" },
+    "terminal_reason": {
+      "type": "string",
+      "description": "Which terminal fired: budget_exhausted | n_spins | max_minutes | maintenance_observed | insufficient_balance | panic | report"
+    },
+    "balance": {
+      "type": "object",
+      "required": ["start", "end", "delta", "max_loss_requested", "max_loss_effective"],
+      "properties": {
+        "start":              { "type": "number" },
+        "end":                { "type": "number" },
+        "delta":              { "type": "number" },
+        "max_loss_requested": { "type": "number" },
+        "max_loss_effective": { "type": "number" }
+      }
+    },
+    "rounds": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["round_id", "game_slug", "started_at", "outcome"],
+        "properties": {
+          "round_id":       { "type": "string" },
+          "game_slug":      { "type": "string" },
+          "started_at":     { "type": "string", "format": "date-time" },
+          "ended_at":       { "type": "string", "format": "date-time" },
+          "bet_amount":     { "type": "number" },
+          "balance_before": { "type": "number" },
+          "balance_after":  { "type": "number" },
+          "outcome":        { "type": "string" },
+          "evidence_path":  { "type": "string" }
+        }
+      }
+    },
+    "intents": {
+      "type": "array",
+      "description": "Per-intent summary: which intents fired, how many turns, planner LLM call count.",
+      "items": {
+        "type": "object",
+        "required": ["intent_id", "turns", "llm_calls"],
+        "properties": {
+          "intent_id":         { "type": "string" },
+          "turns":             { "type": "integer" },
+          "llm_calls":         { "type": "integer" },
+          "input_chars_p50":   { "type": "integer" },
+          "input_chars_p95":   { "type": "integer" }
+        }
+      }
+    },
+    "transitions_added":     { "type": "array", "items": { "type": "string" } },
+    "signatures_proposed":   { "type": "array", "items": { "type": "string" } },
+    "animation_timing_deltas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["game_slug", "action", "p95_before_ms", "p95_after_ms"],
+        "properties": {
+          "game_slug":     { "type": "string" },
+          "action":        { "type": "string" },
+          "p95_before_ms": { "type": "integer" },
+          "p95_after_ms":  { "type": "integer" },
+          "samples_added": { "type": "integer" }
+        }
+      }
+    },
+    "optimizations": {
+      "type": "object",
+      "description": "Status of every optimization the agent claims to apply. ALL must be 'active'; any 'degraded' shows in operator_actions.",
+      "required": ["page_source_excluded", "tool_result_tiering", "history_compactor", "prompt_cache", "replay_determinism"],
+      "properties": {
+        "page_source_excluded": { "type": "string", "enum": ["active", "degraded"] },
+        "tool_result_tiering":  { "type": "string", "enum": ["active", "degraded"] },
+        "history_compactor":    { "type": "string", "enum": ["active", "degraded"] },
+        "prompt_cache":         {
+          "type": "object",
+          "properties": {
+            "status":    { "type": "string", "enum": ["active", "degraded"] },
+            "hit_rate":  { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        },
+        "replay_determinism":   { "type": "string", "enum": ["active", "degraded"] }
+      }
+    },
+    "operator_actions": {
+      "type": "array",
+      "description": "What the pit boss needs to do before the next visit.",
+      "items": {
+        "type": "object",
+        "required": ["kind", "description"],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["proposals_pending", "demoted_rows", "exploration_throttled", "optimization_degraded", "rules_drift", "balance_unparseable"]
+          },
+          "description": { "type": "string" },
+          "evidence":    { "type": "string" }
+        }
+      }
+    }
+  }
+}

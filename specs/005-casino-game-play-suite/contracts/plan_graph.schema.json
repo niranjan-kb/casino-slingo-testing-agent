@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "plan_graph.schema.json",
+  "title": "PlanGraph",
+  "description": "The flow of a casino visit, declared as nodes (intents) + edges (preconditions) + guards. Replaces prose 'Phase N' blocks. Lives in graphs/casino_session.yaml. Loaded once at workflow start; reachability checked on every active_intent transition.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["nodes"],
+  "properties": {
+    "nodes": {
+      "type": "object",
+      "description": "Map of node-name → node definition.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["intent"],
+        "properties": {
+          "intent":            { "type": "string", "description": "intent_id from intents/" },
+          "requires":          { "type": "string", "description": "node-name + '.success' (e.g. 'authenticate.success')" },
+          "input_from":        { "type": "string", "description": "field path from session_intent (e.g. 'session_intent.target')" },
+          "repeat_until":      { "type": "string", "description": "terminal condition name (e.g. 'budget.terminal')" },
+          "trigger":           { "type": "string", "description": "signature condition that activates this node mid-flow (e.g. 'bonus_trigger_signature')" },
+          "returns_to":        { "type": "string", "description": "node-name to return to when this sub-node exits" },
+          "terminal_on_fail":  { "type": "string", "description": "node-name to route to on failure" }
+        }
+      }
+    },
+    "guards": {
+      "type": "object",
+      "description": "Cross-cutting safety checks.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["activity", "after"],
+        "properties": {
+          "activity":  { "type": "string", "description": "activity name (e.g. 'BudgetCheck', 'SaveEvidence')" },
+          "after":     { "type": "string", "description": "trigger phrase: 'each_play_round' | 'N_failures_same_screen' | ..." },
+          "terminate": { "type": "boolean", "default": false },
+          "route":     { "type": "string", "description": "node-name to route to when guard terminates" }
+        }
+      }
+    },
+    "recovery": {
+      "type": "object",
+      "description": "Recovery routes triggered by signals (session_lost, stuck, etc).",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["intent", "trigger"],
+        "properties": {
+          "intent":  { "type": "string" },
+          "trigger": { "type": "string" }
+        }
+      }
+    }
+  }
+}

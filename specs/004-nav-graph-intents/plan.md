@@ -67,7 +67,17 @@ Evaluated against [`.specify/memory/constitution.md`](../../.specify/memory/cons
 | **MW-3** (read-time decay) | ✅ Direct implementation | FR-024, FR-025, FR-026. |
 | **MW-4** (signature proposals) | ✅ Direct implementation | FR-021, FR-022, FR-023. |
 
-**Result**: ✅ **PASS — no violations, no Complexity Tracking entries needed.**
+**Result (initial)**: ✅ **PASS — no violations.**
+
+### Re-evaluation (post-design, 2026-05-06)
+
+After Phase 0 (research.md) and Phase 1 (data-model + contracts), one refinement to WF-3 surfaced:
+
+- The planner's per-call schema builder `_build_plan_next_action_tool` currently lives in `activities/tool_activities.py` (FROZEN per WF-3). Adding `allowed_intent_ids` as a per-call argument is a signature change to a function inside the frozen module.
+- **Resolution (zero new violations)**: extract the schema builder into a new non-frozen module — `prompts/planner_schema.py` — alongside the existing `prompts/generators.py` move that landed during Phase 1. `tool_activities.py` imports the builder and calls it with whatever args `ToolPromptInput` provides; the activity body stays minimal. Adding `allowed_intent_ids` happens in the new non-frozen module.
+- This is the same factoring pattern already applied to `prompts/generators.py` and is consistent with the spirit of WF-3 (frozen module's behavior preserved; the per-call schema-construction helper moves out).
+
+All other rules remain ✅. **Post-design result: PASS, no Complexity Tracking entries needed.**
 
 ## Project Structure
 

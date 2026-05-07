@@ -4,6 +4,8 @@ Last updated: 2026-05-06
 
 > **Single source of truth** for AI coding assistants (Claude Code, Codex, Cursor, etc.) and humans. The runtime persona lives in [`prompts/persona/soul.md`](prompts/persona/soul.md). The runtime topology diagram lives in [agent-harness.md](agent-harness.md).
 
+> **Self-healing is non-negotiable.** The agent must never get stuck.
+
 ## tl;dr for an AI editor
 
 - A **casino game player** built on Temporal for visibility + durability. Player-first, QA-aware.
@@ -135,3 +137,12 @@ uv run scripts/smoke_play_intent.py --timeout 600
 | [.specify/memory/constitution.md](.specify/memory/constitution.md) | Architecture rules and target matrix (v3.0.0) |
 | [specs/004-nav-graph-intents/](specs/004-nav-graph-intents/) | Intent layer spec, plan, contracts |
 | Project memory (`~/.claude/.../memory/`) | Cross-session feedback rules |
+
+## Active Technologies
+- Python 3.10 (existing `.venv` via `uv`) + `temporalio` (durable workflow spine), `litellm` → AWS Bedrock (`claude-sonnet-4-5`), `pyyaml`, MCP via SSE (`appium-mcp@1.56.3` PINNED per MCP-2), `appium-mcp` over `httpx` for SSE (004-nav-graph-intents)
+- SQLite (`data/screen_map.db`) as runtime source of truth (Principle I); Temporal workflow history for conversation + tool results; markdown files in `intents/` and `prompts/persona/` for declarative conten (004-nav-graph-intents)
+- Python 3.10 (`.venv` via `uv`). + `temporalio` (durable spine, replay-deterministic), `litellm` → AWS Bedrock (`claude-sonnet-4-5` via `bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0`), `pyyaml` (intents, manifests, plan graph), `httpx` (MCP SSE). MCP layer: `appium-mcp@1.56.3` (PINNED per MCP-2) on port 3100, persistent SSE. (005-casino-game-play-suite)
+- SQLite at `data/screen_map.db` is the runtime source of truth (Principle I). Tables added below in §"Project Structure → Data". Markdown files in `intents/` and `game_kinds/` are declarative spec only (≤600 / ≤400 tokens). No JSON seed files for game playbooks (the playbook auto-populates). (005-casino-game-play-suite)
+
+## Recent Changes
+- 004-nav-graph-intents: Added Python 3.10 (existing `.venv` via `uv`) + `temporalio` (durable workflow spine), `litellm` → AWS Bedrock (`claude-sonnet-4-5`), `pyyaml`, MCP via SSE (`appium-mcp@1.56.3` PINNED per MCP-2), `appium-mcp` over `httpx` for SSE

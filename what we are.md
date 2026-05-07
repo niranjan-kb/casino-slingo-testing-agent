@@ -111,4 +111,3 @@ Manual promotion verification
 Manual multi-device testing
 The "someone needs to check this on 8 devices" problem
 The multiplier: Once this works on one emulator, it works on N emulators in parallel. AWS Device Farm gives you real devices. Same workflows, same screen maps (per resolution), run the full suite across Pixel 7, Samsung S24, iPhone 15 simultaneously.
-

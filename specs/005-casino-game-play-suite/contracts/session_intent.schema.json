@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "session_intent.schema.json",
+  "title": "SessionIntent",
+  "description": "What the operator is asking the agent to do for this casino visit. Produced by intent_parse_session via tool-use forcing on the parse_session_intent tool. The contract is the synthetic tool's input schema; the planner emits this once at session start.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["flow", "budget", "terminal"],
+  "properties": {
+    "flow": {
+      "type": "string",
+      "enum": ["play", "navigate", "audit", "observe", "report_only"],
+      "description": "What kind of casino visit. play = bet money. navigate = walk to a specific room. audit = look around without betting. observe = watch one game without betting. report_only = produce a report off existing data."
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["any", "slots", "slingo", "blackjack", "roulette", "table", "scratch", "live_dealer"],
+          "description": "Game family. 'any' = no preference; resolver picks by popularity."
+        },
+        "query": {
+          "type": "string",
+          "description": "Free text from the operator. Resolver maps to slug; if zero hits, the search-bar branch types this literally."
+        },
+        "slug": {
+          "type": "string",
+          "description": "If the operator named a known catalog slug exactly. Skips fuzzy resolution."
+        }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_loss_usd"],
+      "properties": {
+        "max_loss_usd": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Stop-loss for this visit. Will be silently capped to env MAX_LOSS_USD if higher."
+        },
+        "max_spins": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Default 20 if unset and flow=play."
+        },
+        "max_minutes": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Default 10 if unset and flow=play."
+        }
+      }
+    },
+    "terminal": {
+      "type": "string",
+      "enum": ["budget_exhausted", "n_spins", "max_minutes", "target_balance_delta", "user_signal", "report"],
+      "description": "Which condition ends the visit. First-of-many semantics: any matching budget bound triggers terminal."
+    }
+  }
+}
