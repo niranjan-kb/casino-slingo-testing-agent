@@ -20,6 +20,7 @@ from workflows.workflow_helpers import (
 )
 
 with workflow.unsafe.imports_passed_through():
+    from activities.intent_activity import is_intent_reachable
     from activities.observer_activity import run_observers
     from activities.tool_activities import ToolActivities, mcp_list_tools
     from goals import goal_list
@@ -31,6 +32,49 @@ with workflow.unsafe.imports_passed_through():
 # Loaded once per worker process at module import (mirrors goal_list pattern).
 # Replay-safe: same files on disk → same registry → same allowed_intent_ids.
 _INTENT_REGISTRY = _load_intent_registry()
+
+
+def _load_plan_graphs() -> Dict[str, Dict[str, Any]]:
+    """Load all plan graphs at module import (spec 005 T029).
+
+    Workflow code cannot do file I/O at runtime — that's a Temporal
+    determinism rule (WF-1). Module-level loading is fine because it
+    happens once per worker process startup before any workflow runs.
+    The same files on disk produce the same dicts deterministically, so
+    replay is safe.
+
+    Maps goal_id → parsed YAML dict. Goals without a plan-graph file
+    (e.g. legacy goal_slingo_qa_android) get no entry → workflow stays
+    in legacy mode, reachability guard is permissive.
+    """
+    out: Dict[str, Dict[str, Any]] = {}
+    try:
+        import os
+        import yaml
+
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        # Conventional path: graphs/<goal_id>.yaml — new goals are a file, not code.
+        graphs_dir = os.path.join(repo_root, "graphs")
+        if not os.path.isdir(graphs_dir):
+            return out
+        for fname in os.listdir(graphs_dir):
+            if not fname.endswith(".yaml"):
+                continue
+            stem = fname[:-5]  # drop .yaml
+            path = os.path.join(graphs_dir, fname)
+            try:
+                with open(path) as f:
+                    parsed = yaml.safe_load(f)
+                if isinstance(parsed, dict) and parsed.get("nodes"):
+                    out[f"goal_{stem}"] = parsed  # graphs/casino_session.yaml → goal_casino_session
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return out
+
+
+_PLAN_GRAPHS = _load_plan_graphs()
 
 # Constants
 MAX_TURNS_BEFORE_CONTINUE = 250
@@ -91,6 +135,17 @@ class AgentGoalWorkflow:
         self.active_intent: Optional[str] = None
         self.completed_intents: List[str] = []
 
+        # Spec 005 state (T029, T030, T031).
+        # plan_graph is set during run() when the goal id maps to a graph file.
+        # session_intent is the parsed prompt envelope (from intent_parse_session)
+        # threaded through the play flow. completed_nodes tracks plan-graph
+        # progression for the reachability guard (T031). All replay-safe:
+        # plan_graph is module-level; session_intent and completed_nodes are
+        # workflow state mutated only via deterministic in-workflow logic.
+        self.plan_graph: Optional[Dict[str, Any]] = None
+        self.session_intent: Optional[Dict[str, Any]] = None
+        self.completed_nodes: List[str] = []
+
     # see ../api/main.py#temporal_client.start_workflow() for how the input parameters are set
     @workflow.run
     async def run(self, combined_input: CombinedInput) -> str:
@@ -98,6 +153,16 @@ class AgentGoalWorkflow:
         # setup phase, starts with blank tool_params and agent_goal prompt as defined in tools/goal_registry.py
         params = combined_input.tool_params
         self.goal = combined_input.agent_goal
+
+        # Spec 005 T029: pick the plan graph for this goal, if any. Module-level
+        # _PLAN_GRAPHS was loaded once at worker startup (replay-safe). Goals
+        # without a graph stay in legacy mode — reachability guard is permissive.
+        goal_id = getattr(self.goal, "id", None)
+        if goal_id and goal_id in _PLAN_GRAPHS:
+            self.plan_graph = _PLAN_GRAPHS[goal_id]
+            workflow.logger.info(
+                f"plan_graph loaded for {goal_id}: {len(self.plan_graph.get('nodes', {}))} nodes"
+            )
 
         await self.lookup_wf_env_settings(combined_input)
 
@@ -218,10 +283,41 @@ class AgentGoalWorkflow:
                 new_active_intent = tool_data.get("active_intent")
                 if new_active_intent and new_active_intent in _INTENT_REGISTRY:
                     if new_active_intent != self.active_intent:
-                        workflow.logger.info(
-                            f"intent transition: {self.active_intent} -> {new_active_intent}"
+                        # Spec 005 T031: plan-graph reachability guard. Active
+                        # only when a plan graph is loaded for this goal; legacy
+                        # goals without a graph (goal_slingo_qa_android et al.)
+                        # always pass. The activity is replay-safe — its result
+                        # is captured in workflow history (FR-035).
+                        allowed = await self._is_intent_reachable_guard(
+                            new_active_intent
                         )
-                        self.active_intent = new_active_intent
+                        if not allowed:
+                            workflow.logger.warning(
+                                f"plan-graph guard blocked intent transition "
+                                f"{self.active_intent} -> {new_active_intent}; "
+                                f"completed_nodes={self.completed_nodes}; "
+                                f"keeping previous intent"
+                            )
+                            # Fall back: don't update self.active_intent. The
+                            # planner sees the same intent context next turn and
+                            # should re-plan. Save evidence is best-effort —
+                            # observers never halt the run (Constitution III).
+                        else:
+                            workflow.logger.info(
+                                f"intent transition: {self.active_intent} -> {new_active_intent}"
+                            )
+                            self.active_intent = new_active_intent
+
+                # Spec 005 T031: when an intent emits next='done', mark its
+                # plan-graph node as completed so subsequent reachability checks
+                # see it satisfied. This is the linkage between the intent layer
+                # and the plan graph; both layers stay correct independently.
+                if (
+                    self.plan_graph is not None
+                    and tool_data.get("next") == "done"
+                    and self.active_intent
+                ):
+                    self._mark_plan_node_completed(self.active_intent)
 
                 workflow.logger.info(
                     f"next_step: {next_step}, current tool is {current_tool}"
@@ -416,6 +512,35 @@ class AgentGoalWorkflow:
         return list(self.completed_intents)
 
     @workflow.query
+    def get_session_intent(self) -> Optional[Dict[str, Any]]:
+        """Query handler (spec 005 T030): the parsed `SessionIntent` envelope.
+
+        Set once at session start by intent_parse_session (US1) and threaded
+        through navigate_to_game / play_game. None until the planner emits a
+        SessionIntent or for legacy flows that don't run intent_parse_session.
+        Shape per `contracts/session_intent.schema.json`.
+        """
+        return dict(self.session_intent) if self.session_intent else None
+
+    @workflow.query
+    def get_plan_graph_state(self) -> Dict[str, Any]:
+        """Query handler (spec 005 T030): plan-graph progression for this run.
+
+        Surfaces:
+            plan_graph_loaded:  bool — whether a plan graph guides this goal
+            completed_nodes:    list — node names whose intent has succeeded
+            current_intent:     str  — active_intent (mirrors get_active_intent)
+
+        Used by the React UI / run-report to render the plan-graph DAG with
+        completed nodes highlighted.
+        """
+        return {
+            "plan_graph_loaded": self.plan_graph is not None,
+            "completed_nodes": list(self.completed_nodes),
+            "current_intent": self.active_intent,
+        }
+
+    @workflow.query
     def get_pending_observations(self) -> List[Dict[str, Any]]:
         """Query handler: observations queued for the next planner turn.
 
@@ -504,6 +629,58 @@ class AgentGoalWorkflow:
             return True
         else:
             return False
+
+    # ── Spec 005 T031: plan-graph reachability + node completion ──────────
+
+    async def _is_intent_reachable_guard(self, candidate_intent: str) -> bool:
+        """Return True if the candidate intent is reachable per the plan graph.
+
+        Permissive when no plan graph is loaded (legacy goals — auth flow path
+        is unaffected). Calls the `is_intent_reachable` activity so the result
+        is captured in workflow history (FR-035 replay determinism).
+        """
+        if self.plan_graph is None:
+            return True
+        try:
+            result = await workflow.execute_activity(
+                is_intent_reachable,
+                {
+                    "active_intent": candidate_intent,
+                    "completed_nodes": list(self.completed_nodes),
+                    "current_node": self.active_intent,
+                },
+                start_to_close_timeout=timedelta(seconds=30),
+                retry_policy=RetryPolicy(
+                    initial_interval=timedelta(seconds=1),
+                    maximum_attempts=2,
+                    backoff_coefficient=1.0,
+                ),
+            )
+        except Exception as e:
+            # Activity failure → permissive. Constitution III: observers/guards
+            # never halt the goal loop. The failure shows up in the run report.
+            workflow.logger.warning(f"reachability guard failed open: {e}")
+            return True
+        return bool(result.get("reachable", True))
+
+    def _mark_plan_node_completed(self, intent_id: str) -> None:
+        """Map an intent id back to its plan-graph node name and record completion.
+
+        The plan graph nodes use names like `authenticate`, `navigate_to_game`,
+        `play_game`. Intents are `intent_authenticate`, `intent_navigate_to_game`,
+        etc. We search for the node whose `intent` matches and add its name to
+        `completed_nodes`. Idempotent — a node appears at most once.
+        """
+        if self.plan_graph is None:
+            return
+        nodes = self.plan_graph.get("nodes") or {}
+        for node_name, defn in nodes.items():
+            if defn.get("intent") == intent_id and node_name not in self.completed_nodes:
+                self.completed_nodes.append(node_name)
+                workflow.logger.info(
+                    f"plan_graph: node '{node_name}' completed via {intent_id}"
+                )
+                return
 
     # define if we're ready for tool execution
     def ready_for_tool_execution(

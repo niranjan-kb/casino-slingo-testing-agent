@@ -4,36 +4,35 @@ The agent_toolPlanner activity uses Anthropic tool-use forcing
 (`tool_choice={"type": "function", "function": {"name": "plan_next_action"}}`),
 so the model's output shape is structurally guaranteed and we no longer have
 to beg for valid JSON in the prompt. That lets these generators stay focused
-on the actual content the model needs: the goal, the tools, the recent
-conversation, and the decision rules — nothing else.
+on the actual content the model needs.
 
-Sections produced (in order):
+Sections produced (in order, layered per setup-doc §5 / spec 005):
 
-    # <Agent name>
-    <goal description — soul + identity + tools.md + user.md>
+    L0  # <Agent name>                            persona + identity (cacheable)
+    L1  ## Tools                                  filtered by active intent (cacheable)
+    L2  ## Active intent                          spec-004 intent body
+    L3  ## Runtime facts                          (TBD — supplied by caller)
+    L4  ## Game knowledge                         playbook + kind file (spec 005 T026)
+    L5  ## Conversation so far                    last-N verbatim + summaries (T027)
+    L6  ## Example conversation                   (only if the goal provides one)
+    L7  ## Decision rules                         (terse, domain-agnostic)
 
-    ## Tools
-    <one canonical list of tools with name, description, args>
+Spec 005 deltas applied here (additive — defaults preserve legacy behaviour):
+    T024  page-source XML stripped from history → {hash, len, hint} stub
+    T025  tool list filtered by active_intent via tools/registry/<Tool>.yaml
+    T026  game-knowledge layer injected on loaded-game signature
+    T027  history compactor: last N=2 verbatim, older → 1-line summaries
+    T028  cache_control hooks (deferred — requires tool_activities.py touch)
 
-    ## Conversation so far
-    <conversation history, with large items truncated>
-
-    ## Example conversation                  (only if the goal provides one)
-    <agent_goal.example_conversation_history>
-
-    ## Decision rules                        (terse, domain-agnostic)
-    <how to choose `next` and `tool`>
-
-    ## Validate this proposed action         (only when raw_json is supplied)
-    <previously-emitted plan to double-check>
-
-The structured response shape (next/tool/args/response) is documented inside
-the plan_next_action tool schema — the model already sees it from the
-forced-tool-use machinery, so we don't restate it here.
+The structured response shape (next/tool/args/response/active_intent) is
+documented inside the plan_next_action tool schema — the model sees it from
+the forced-tool-use machinery, so we don't restate it here.
 """
 
+import hashlib
 import json
-from typing import Any, Dict, List, Optional
+import os
+from typing import Any, Dict, List, Optional, Set
 
 from models.tool_definitions import AgentGoal
 
@@ -43,6 +42,21 @@ from models.tool_definitions import AgentGoal
 # turn drowns the prompt and pushes useful context out of the window.
 _MAX_MESSAGE_CHARS = 4000
 _MAX_HISTORY_MESSAGES = 80
+
+# Spec 005 T027: last-N verbatim, older → 1-line summary lines.
+_VERBATIM_RECENT_TURNS = int(os.getenv("PROMPT_VERBATIM_RECENT_TURNS", "2"))
+
+# Spec 005 T024: any string in a tool result longer than this and starting with
+# '<' (or containing '<hierarchy') is treated as page-source / XML and stubbed.
+_XML_STUB_THRESHOLD_CHARS = 1200
+
+# Spec 005 T025/T026: registries on disk. Use os.path (NOT pathlib.Path.resolve)
+# because this module is imported into the Temporal workflow sandbox, which
+# restricts pathlib path-resolution methods. os.path.abspath is permitted —
+# matches the pattern used by workflows/agent_goal_workflow.py itself.
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_TOOL_REGISTRY_DIR = os.path.join(_REPO_ROOT, "tools", "registry")
+_GAME_KINDS_DIR = os.path.join(_REPO_ROOT, "game_kinds")
 
 
 def generate_genai_prompt(
@@ -55,21 +69,41 @@ def generate_genai_prompt(
     active_intent_body: Optional[str] = None,
     completed_intents: Optional[List[str]] = None,
     session_prompt: Optional[str] = None,
+    # ── Spec 005 additions (defaults preserve legacy behaviour) ─────────────
+    runtime_facts: Optional[Dict[str, Any]] = None,
+    game_context: Optional[Dict[str, Any]] = None,
+    platform: Optional[str] = None,
 ) -> str:
     """Build the system-message text for the toolPlanner LLM call.
 
     The intent-layer parameters (specs/004-nav-graph-intents) inject the active
     intent's body and a short status header (session prompt, completed intents)
     so the LLM has per-turn context about what it is currently driving toward.
+
+    Spec 005 additions:
+        runtime_facts   — RuntimeFacts envelope (build_env, device, jurisdiction,
+                          stop-loss). Injected as a compact JSON block in L3.
+        game_context    — {playbook: dict, kind_name: str} for the current loaded
+                          game. Injected as L4 game-knowledge layer (T026).
+        platform        — RuntimeFacts.platform; used to filter the tool registry
+                          (T025) so per-platform tools don't leak.
     """
     sections: List[str] = []
 
-    # 1. Goal — the long-form persona + identity + phase logic
+    # L0. Goal — persona + identity (cacheable prefix).
     sections.append(
         f"# {agent_goal.agent_name}\n\n{agent_goal.description}"
     )
 
-    # 1a. Intent layer — active intent body and session header (specs/004).
+    # L1. Tools — filtered by active intent + platform (T025).
+    sections.append(_format_tools(
+        agent_goal,
+        mcp_tools_info,
+        active_intent_id=active_intent_id,
+        platform=platform,
+    ))
+
+    # L2. Intent layer — active intent body and session header (specs/004).
     intent_section = _format_intent_section(
         active_intent_id=active_intent_id,
         active_intent_body=active_intent_body,
@@ -79,24 +113,30 @@ def generate_genai_prompt(
     if intent_section:
         sections.append(intent_section)
 
-    # 2. Tools — single canonical listing (the upstream listed twice).
-    sections.append(_format_tools(agent_goal, mcp_tools_info))
+    # L3. Runtime facts — compact JSON envelope (spec 005 T013).
+    if runtime_facts:
+        sections.append(_format_runtime_facts(runtime_facts))
 
-    # 3. Conversation so far, with large entries elided so we don't drown
-    #    the window in stale page_source dumps.
+    # L4. Game knowledge — playbook + kind file when in a loaded game (T026).
+    if game_context:
+        kb_section = _format_game_knowledge(game_context)
+        if kb_section:
+            sections.append(kb_section)
+
+    # L5. Conversation so far — last-N verbatim, older summarized (T024 + T027).
     sections.append(_format_history(conversation_history))
 
-    # 4. Optional few-shot example provided by the goal definition.
+    # L6. Optional few-shot example provided by the goal definition.
     if agent_goal.example_conversation_history:
         sections.append(
             "## Example conversation flow\n\n"
             f"{agent_goal.example_conversation_history}"
         )
 
-    # 5. Decision rules — terse, no domain-specific examples bleeding in.
+    # L7. Decision rules — terse, no domain-specific examples bleeding in.
     sections.append(_decision_rules(multi_goal_mode))
 
-    # 6. Validation mode — re-evaluate a previously-proposed plan.
+    # Validation mode — re-evaluate a previously-proposed plan.
     if raw_json is not None:
         sections.append(
             "## Validate this proposed action\n\n"
@@ -143,28 +183,46 @@ def _format_intent_section(
     return "\n\n".join(lines)
 
 
-def _format_tools(agent_goal: AgentGoal, mcp_tools_info: Optional[dict]) -> str:
+def _format_tools(
+    agent_goal: AgentGoal,
+    mcp_tools_info: Optional[dict],
+    *,
+    active_intent_id: Optional[str] = None,
+    platform: Optional[str] = None,
+) -> str:
     """Render the tool catalog the model can choose from.
 
-    We list every tool exactly once. Native tools (declared on the goal) and
-    MCP-provided tools (auto-discovered at workflow start) are merged into a
-    single section so the model has one place to look.
+    Spec 005 T025: when `active_intent_id` is set, the registry side-cars in
+    `tools/registry/*.yaml` are consulted. Native tools whose registry entry
+    does NOT include the current intent are dropped; same for tools that
+    don't include the current platform. MCP tools (appium-mcp etc.) are not
+    in the registry and pass through unfiltered — they're already platform-
+    bound by virtue of the MCP server itself.
+
+    When the registry lookup fails or no intent is supplied, behaviour is
+    legacy: list every tool, dedup'd by name.
     """
+    intent_filter = _load_tool_registry_filter(active_intent_id, platform)
+
     lines: List[str] = ["## Tools"]
-    seen: set[str] = set()
+    seen: Set[str] = set()
+    dropped: List[str] = []
 
     # Native tools declared on the goal.
     for tool in agent_goal.tools:
         if tool.name in seen:
             continue
         seen.add(tool.name)
+        if intent_filter is not None and not intent_filter(tool.name):
+            dropped.append(tool.name)
+            continue
         lines.append(_render_tool(
             name=tool.name,
             description=tool.description,
             args=[(a.name, a.type, a.description) for a in tool.arguments],
         ))
 
-    # MCP tools discovered at runtime.
+    # MCP tools discovered at runtime — pass through unfiltered (no registry).
     if mcp_tools_info and mcp_tools_info.get("success"):
         for tool_name, info in (mcp_tools_info.get("tools") or {}).items():
             if tool_name in seen:
@@ -177,7 +235,113 @@ def _format_tools(agent_goal: AgentGoal, mcp_tools_info: Optional[dict]) -> str:
                 args=args,
             ))
 
+    if dropped and active_intent_id:
+        lines.append(
+            f"\n_(filtered {len(dropped)} tool(s) not applicable to "
+            f"`{active_intent_id}`: {', '.join(sorted(dropped))})_"
+        )
+
     return "\n".join(lines)
+
+
+def _load_tool_registry_filter(
+    active_intent_id: Optional[str],
+    platform: Optional[str],
+) -> Optional[Any]:
+    """Return a callable `name → bool` that applies the intent + platform filter,
+    or None if filtering is disabled.
+
+    Spec 005 T025 / research §R2. The registry is loaded lazily and cached at
+    the function level so we don't re-read 9 YAMLs every prompt build.
+    """
+    if not active_intent_id and not platform:
+        return None
+    registry = _tool_registry_cache()
+    if registry is None:
+        return None  # registry missing or unreadable — fail open
+
+    def _allow(tool_name: str) -> bool:
+        spec = registry.get(tool_name)
+        if spec is None:
+            return True  # tool isn't in the registry (e.g. MCP tool); allow
+        if active_intent_id:
+            # Registry YAML lists intents with the full `intent_*` id, matching
+            # the values the planner emits. Accept both forms (full + short).
+            tool_intents = spec.get("intents") or []
+            short = active_intent_id.removeprefix("intent_")
+            if active_intent_id not in tool_intents and short not in tool_intents:
+                return False
+        if platform:
+            tool_platforms = spec.get("platforms") or []
+            if platform not in tool_platforms:
+                return False
+        return True
+
+    return _allow
+
+
+_TOOL_REGISTRY: Optional[Dict[str, Dict[str, Any]]] = None
+_GAME_KIND_BODIES: Dict[str, str] = {}
+
+
+def _build_tool_registry() -> Optional[Dict[str, Dict[str, Any]]]:
+    """Read tools/registry/*.yaml. Called at module import (outside sandbox)."""
+    if not os.path.isdir(_TOOL_REGISTRY_DIR):
+        return None
+    try:
+        import yaml
+    except ImportError:
+        return None
+    out: Dict[str, Dict[str, Any]] = {}
+    for fname in os.listdir(_TOOL_REGISTRY_DIR):
+        if not fname.endswith(".yaml"):
+            continue
+        path = os.path.join(_TOOL_REGISTRY_DIR, fname)
+        try:
+            with open(path) as f:
+                spec = yaml.safe_load(f)
+            if isinstance(spec, dict) and spec.get("name"):
+                out[spec["name"]] = spec
+        except Exception:
+            continue
+    return out
+
+
+def _build_game_kind_bodies() -> Dict[str, str]:
+    """Read game_kinds/*.md. Called at module import (outside sandbox)."""
+    out: Dict[str, str] = {}
+    if not os.path.isdir(_GAME_KINDS_DIR):
+        return out
+    for fname in os.listdir(_GAME_KINDS_DIR):
+        if not fname.endswith(".md"):
+            continue
+        kind_name = fname[:-3]
+        path = os.path.join(_GAME_KINDS_DIR, fname)
+        try:
+            with open(path) as f:
+                out[kind_name] = f.read()
+        except Exception:
+            continue
+    return out
+
+
+def _tool_registry_cache() -> Optional[Dict[str, Dict[str, Any]]]:
+    """Return the pre-built registry. No I/O — safe to call from workflow sandbox."""
+    return _TOOL_REGISTRY
+
+
+def _reset_tool_registry_cache() -> None:
+    """Test hook: re-read the registry from disk. Must be called outside the sandbox."""
+    global _TOOL_REGISTRY, _GAME_KIND_BODIES
+    _TOOL_REGISTRY = _build_tool_registry()
+    _GAME_KIND_BODIES = _build_game_kind_bodies()
+
+
+# Warm caches at module import — happens during worker startup, BEFORE the
+# workflow sandbox restrictions activate. Workflow code then reads from the
+# in-memory dicts without touching the filesystem.
+_TOOL_REGISTRY = _build_tool_registry()
+_GAME_KIND_BODIES = _build_game_kind_bodies()
 
 
 def _render_tool(name: str, description: str, args: List[tuple]) -> str:
@@ -214,16 +378,83 @@ def _mcp_tool_args(input_schema: Any) -> List[tuple]:
     return out
 
 
-def _format_history(conversation_history: Any) -> str:
-    """Render the conversation history, eliding oversized entries.
+def _format_runtime_facts(runtime_facts: Dict[str, Any]) -> str:
+    """L3 layer: compact JSON envelope with build_env, device, jurisdiction,
+    target.app_id, constraints. Spec 005 T013 / setup-doc §5.
 
-    A few rules:
-    - The most recent {_MAX_HISTORY_MESSAGES} messages are kept; older ones
-      get a one-line summary.
-    - Any single message whose serialised body exceeds {_MAX_MESSAGE_CHARS}
-      is truncated with a marker so the model knows the original was longer.
-    - This keeps the prompt bounded even after long page-source dumps or
-      verbose tool results.
+    Credentials, OTP digits, secrets are NEVER rendered — `account_ref` is an
+    opaque secret-store handle and is the only thing visible. The agent reads
+    creds at activity-time, not via the prompt.
+    """
+    facts = dict(runtime_facts)
+    target = dict(facts.get("target") or {})
+    target.pop("otp_source", None)  # belt-and-suspenders — never leak
+    facts["target"] = target
+    return (
+        "## Runtime facts\n\n"
+        "```json\n"
+        f"{json.dumps(facts, indent=2, default=str)}\n"
+        "```"
+    )
+
+
+def _format_game_knowledge(game_context: Dict[str, Any]) -> str:
+    """L4 layer: per-game playbook + per-kind file. Spec 005 T026.
+
+    Triggered by intent_load_game_context when a `game_directory.loaded_signature`
+    matches the current screen. Combined size targets ≤ 600 tokens (FR-010).
+
+    `game_context` shape:
+        {
+            "playbook":    {slug, kind, actions_json, balance_signature,
+                            balance_regex, bonus_trigger_signatures, ...},
+            "kind_name":   "slingo" | "slots" | "blackjack" | "roulette",
+        }
+    """
+    pb = game_context.get("playbook") or {}
+    kind_name = game_context.get("kind_name")
+    if not pb and not kind_name:
+        return ""
+
+    parts: List[str] = ["## Game knowledge"]
+
+    if pb:
+        # Render only the salient playbook fields — drop bookkeeping (created_at, etc).
+        salient_keys = (
+            "slug", "kind", "round_end_signature", "balance_signature", "balance_regex",
+            "bonus_trigger_signatures", "auto_dismiss_signatures", "actions_json",
+            "rules_json", "recovery_json",
+        )
+        playbook_compact = {k: pb.get(k) for k in salient_keys if pb.get(k)}
+        if playbook_compact:
+            parts.append(
+                "**Playbook (per-game):**\n"
+                "```json\n"
+                f"{json.dumps(playbook_compact, indent=2, default=str)}\n"
+                "```"
+            )
+
+    if kind_name:
+        kind_body = _GAME_KIND_BODIES.get(kind_name)
+        if kind_body:
+            parts.append(f"**Kind reference (`{kind_name}`):**\n\n{kind_body}")
+
+    return "\n\n".join(parts) if len(parts) > 1 else ""
+
+
+def _format_history(conversation_history: Any) -> str:
+    """Render the conversation history with spec 005 T024 + T027 applied.
+
+    T024 (page-source strip): any tool-result string field that looks like
+    XML/page-source (length > 1200 chars and starts with '<' or contains
+    '<hierarchy') is replaced with a `{hash, len, hint}` stub. The model never
+    sees the raw XML — `FindElementWithFallback` consumed it locally; the
+    planner only needs the outcome.
+
+    T027 (history compactor): the most recent N messages (default 2) are kept
+    verbatim; older messages collapse to a one-line summary
+    `t-K [actor] tool=<name> next=<sig>` so the planner has continuity without
+    paying for repeated tool-result payloads.
     """
     if not conversation_history:
         return "## Conversation so far\n\n(empty)"
@@ -234,19 +465,35 @@ def _format_history(conversation_history: Any) -> str:
         else conversation_history
     ) or []
 
+    if not messages:
+        return "## Conversation so far\n\n(empty)"
+
     skipped = 0
     if len(messages) > _MAX_HISTORY_MESSAGES:
         skipped = len(messages) - _MAX_HISTORY_MESSAGES
         messages = messages[-_MAX_HISTORY_MESSAGES:]
 
+    n_recent = min(_VERBATIM_RECENT_TURNS, len(messages))
+    older = messages[:-n_recent] if n_recent else messages
+    recent = messages[-n_recent:] if n_recent else []
+
     lines: List[str] = ["## Conversation so far"]
     if skipped:
-        lines.append(f"_({skipped} earlier message(s) omitted to keep the prompt bounded.)_\n")
+        lines.append(f"_({skipped} earlier message(s) omitted to keep the prompt bounded.)_")
 
-    for msg in messages:
+    # Older → one-line summaries. Indexes are negative offsets from "now".
+    if older:
+        lines.append("")
+        for offset, msg in enumerate(older, start=1):
+            t_label = f"t-{len(messages) - offset + 1}"
+            lines.append("- " + _summarize_message(msg, t_label=t_label))
+
+    # Recent → verbatim, with page-source stripped.
+    for msg in recent:
         actor = msg.get("actor", "unknown") if isinstance(msg, dict) else "unknown"
         body = msg.get("response", "") if isinstance(msg, dict) else msg
         rendered = body if isinstance(body, str) else json.dumps(body, default=str)
+        rendered = _strip_xml_payloads(rendered)
         if len(rendered) > _MAX_MESSAGE_CHARS:
             head = rendered[: _MAX_MESSAGE_CHARS - 100]
             rendered = (
@@ -256,6 +503,147 @@ def _format_history(conversation_history: Any) -> str:
         lines.append(f"\n**{actor}:**\n{rendered}")
 
     return "\n".join(lines)
+
+
+def _summarize_message(msg: Any, *, t_label: str) -> str:
+    """One-line distillation of an older history entry (T027).
+
+    Format: `t-K [actor] tool=<name> next=<sig>|status=<short>` — short enough
+    to keep N=80 of these well under 5K chars total.
+
+    Spec 005 T024: tool-result bodies that contain page-source XML never bleed
+    into the preview — they are described by their key shape, not their content.
+    """
+    if not isinstance(msg, dict):
+        text = str(msg)
+        return f"{t_label} {text[:120]}{'…' if len(text) > 120 else ''}"
+    actor = msg.get("actor", "?")
+    body = msg.get("response", "")
+    if isinstance(body, dict):
+        tool = body.get("tool") or body.get("current_tool") or ""
+        next_label = body.get("next") or ""
+        screen = body.get("current_screen_signature") or body.get("screen") or ""
+        bits = []
+        if tool:
+            bits.append(f"tool={tool}")
+        if next_label:
+            bits.append(f"next={next_label}")
+        if screen:
+            bits.append(f"screen={screen}")
+        if not bits:
+            # Tool-result-shape body. Describe by key set, NEVER render values
+            # — this is where XML payloads would otherwise leak as the first
+            # 120 chars of the dict's JSON representation.
+            preview = _summarize_dict_keys(body)
+            bits.append(preview)
+        return f"{t_label} [{actor}] " + " ".join(bits)
+    # Text body — first line, truncated. Apply XML strip first so a long
+    # raw-XML body is replaced with the {hash, len} stub.
+    s = _strip_xml_payloads(str(body)) if body else ""
+    text = s.strip().splitlines()[0] if s else ""
+    if len(text) > 120:
+        text = text[:117] + "…"
+    return f"{t_label} [{actor}] {text}"
+
+
+def _summarize_dict_keys(body: Dict[str, Any]) -> str:
+    """Describe a tool-result dict by its keys + whether any contained
+    a stripped XML payload. Never includes raw values that could leak XML."""
+    fragments: List[str] = []
+    has_xml = False
+    for key, val in body.items():
+        if isinstance(val, str) and _looks_like_xml_payload(val):
+            has_xml = True
+            fragments.append(f"{key}=<XML stripped len={len(val)}>")
+            continue
+        if isinstance(val, bool):
+            fragments.append(f"{key}={str(val).lower()}")
+        elif isinstance(val, (int, float)):
+            fragments.append(f"{key}={val}")
+        elif isinstance(val, str):
+            short = val if len(val) <= 40 else val[:37] + "…"
+            fragments.append(f'{key}="{short}"')
+        elif isinstance(val, list):
+            fragments.append(f"{key}=[{len(val)} items]")
+        else:
+            fragments.append(f"{key}={type(val).__name__}")
+        if sum(len(f) for f in fragments) > 200:
+            fragments.append("…")
+            break
+    label = "result " + " ".join(fragments)
+    if has_xml:
+        label += " (XML stripped)"
+    return label
+
+
+def _strip_xml_payloads(rendered: str) -> str:
+    """Replace large XML/page-source content with a `{hash, len, hint}` stub (T024).
+
+    Detection is intentionally permissive: any string field longer than 1200
+    chars that starts with '<' (after whitespace) is treated as page-source
+    and replaced. False positives are rare in tool-result JSON; false negatives
+    leak prompt tokens, so we lean toward stripping.
+    """
+    # Cheap pre-check: if there's no plausibly large XML in the entire blob, exit.
+    if "<" not in rendered or len(rendered) < _XML_STUB_THRESHOLD_CHARS:
+        return rendered
+    try:
+        data = json.loads(rendered)
+    except (TypeError, ValueError):
+        # Not JSON — could be a raw XML body. If it looks like one, stub it.
+        stripped = rendered.lstrip()
+        if stripped.startswith("<") and len(rendered) > _XML_STUB_THRESHOLD_CHARS:
+            digest = hashlib.sha256(rendered.encode("utf-8")).hexdigest()[:12]
+            return (
+                f"<XML stripped — hash={digest}, len={len(rendered)} chars; "
+                f"call appium_get_page_source again if you need the latest tree>"
+            )
+        return rendered
+    modified = _walk_and_stub(data)
+    if modified:
+        return json.dumps(data, default=str)
+    return rendered
+
+
+def _walk_and_stub(node: Any) -> bool:
+    """Recursively replace large XML-looking strings inside a JSON-ish structure.
+
+    Returns True if any replacement happened, so callers can re-serialise.
+    """
+    modified = False
+    if isinstance(node, dict):
+        for key, val in list(node.items()):
+            if isinstance(val, str) and _looks_like_xml_payload(val):
+                node[key] = _xml_stub_for(val, hint_field=key)
+                modified = True
+            elif isinstance(val, (dict, list)):
+                if _walk_and_stub(val):
+                    modified = True
+    elif isinstance(node, list):
+        for i, item in enumerate(node):
+            if isinstance(item, str) and _looks_like_xml_payload(item):
+                node[i] = _xml_stub_for(item, hint_field=None)
+                modified = True
+            elif isinstance(item, (dict, list)):
+                if _walk_and_stub(item):
+                    modified = True
+    return modified
+
+
+def _looks_like_xml_payload(s: str) -> bool:
+    if len(s) < _XML_STUB_THRESHOLD_CHARS:
+        return False
+    head = s.lstrip()[:200]
+    return head.startswith("<") or "<hierarchy" in head or "<?xml" in head
+
+
+def _xml_stub_for(s: str, *, hint_field: Optional[str]) -> str:
+    digest = hashlib.sha256(s.encode("utf-8")).hexdigest()[:12]
+    field_part = f" field={hint_field}" if hint_field else ""
+    return (
+        f"<XML stripped — hash={digest}, len={len(s)} chars{field_part}; "
+        f"call appium_get_page_source again if you need the latest tree>"
+    )
 
 
 def _decision_rules(multi_goal_mode: bool) -> str:
