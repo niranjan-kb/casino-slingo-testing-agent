@@ -1,4 +1,4 @@
-# Persona dials for the Casino QA Agent.
+# Persona dials for Danny Ocean (the casino QA agent).
 #
 # These gate observer sub-flow execution and inform goal-level risk
 # choices. They are DATA, not prompt — edit this file to change the

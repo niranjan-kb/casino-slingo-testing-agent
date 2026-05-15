@@ -1,6 +1,6 @@
 """Screen identity computation for the observer framework.
 
-Reuses the matching logic from tools/slingo_qa/detect_screen.py to derive
+Reuses the matching logic from tools/casino_qa/detect_screen.py to derive
 a stable screen identity from page-source XML, without making any extra
 device calls (FR-008).
 
@@ -97,9 +97,162 @@ def parse_page_source(raw: str) -> List[Dict[str, Any]]:
                 "content-desc": desc,
                 "class": attrs.get("class", ""),
                 "bounds": bounds,
+                "clickable": (attrs.get("clickable") == "true"),
+                "focusable": (attrs.get("focusable") == "true"),
+                "scrollable": (attrs.get("scrollable") == "true"),
             }
         )
     return elements
+
+
+# ── Spec 005 T043: interactive-element enumeration for the action frontier ─
+
+# Substrings (in resource-id or content-desc) that mark destructive controls.
+# Mirrors `_DESTRUCTIVE_VERBS` in shared/screen_graph.py.
+_DESTRUCTIVE_SUBSTRINGS = (
+    "deposit_submit", "withdraw_submit", "kyc_submit",
+    "account_close", "promo_redeem", "fancash_convert",
+)
+_REVERSIBLE_SUBSTRINGS = (
+    "checkbox", "toggle", "switch", "slider",
+)
+
+
+def _classify_side_effect(element: Dict[str, Any]) -> str:
+    """Heuristic: idempotent | reversible | destructive.
+
+    Rules:
+      - Destructive: resource-id or content-desc matches a known
+        destructive substring (deposit_submit etc.).
+      - Reversible: control type implies state-toggling (checkboxes,
+        switches) — re-tapping reverses the effect.
+      - Default: idempotent (covers nav taps, scroll, neutral buttons).
+    """
+    rid = (element.get("resource-id") or "").lower()
+    desc = (element.get("content-desc") or "").lower()
+    blob = f"{rid}|{desc}"
+    if any(s in blob for s in _DESTRUCTIVE_SUBSTRINGS):
+        return "destructive"
+    cls = (element.get("class") or "").lower()
+    if any(s in blob for s in _REVERSIBLE_SUBSTRINGS) or "toggle" in cls or "switch" in cls:
+        return "reversible"
+    return "idempotent"
+
+
+def _stable_element_id(element: Dict[str, Any]) -> Optional[str]:
+    """Pick the most stable identifier for an element — for frontier key.
+
+    Preference order:
+      1. resource-id (short form, post-`/`)
+      2. content-desc
+      3. text (only if reasonably short, else skip — text drifts)
+
+    Returns None for elements with no stable handle (will be excluded
+    from the frontier; we only track addressable controls).
+    """
+    rid = element.get("resource-id") or ""
+    if rid:
+        return rid.split("/")[-1] if "/" in rid else rid
+    desc = (element.get("content-desc") or "").strip()
+    if desc:
+        return desc
+    text = (element.get("text") or "").strip()
+    if text and len(text) <= 64:
+        return text
+    return None
+
+
+def extract_interactive_elements(
+    elements: List[Dict[str, Any]],
+) -> List[Dict[str, str]]:
+    """Filter parsed elements to interactive controls — frontier candidates.
+
+    An element is interactive if it has `clickable=true` or `focusable=true`
+    (Android), or its class implies interactivity (Button/EditText/etc.).
+    De-duplicates by (element_id) so each addressable control yields one row.
+    """
+    out: Dict[str, Dict[str, str]] = {}
+    for el in elements:
+        if not (el.get("clickable") or el.get("focusable")):
+            cls = (el.get("class") or "").lower()
+            if not any(k in cls for k in (
+                "button", "edittext", "imagebutton", "switch", "checkbox",
+                "tab", "menuitem",
+            )):
+                continue
+        eid = _stable_element_id(el)
+        if not eid:
+            continue
+        if eid not in out:
+            out[eid] = {
+                "element_id": eid,
+                "side_effect": _classify_side_effect(el),
+            }
+    return list(out.values())
+
+
+# ── Spec 005 T046: lobby-walk game-tile extraction ─────────────────────────
+
+# A lobby tile is recognized by these resource-id substrings.
+_TILE_ID_SUBSTRINGS = ("game_tile", "lobby_tile", "casino_tile", "tile_card")
+# Slug fallback derived from text — strip non-alnum, lowercase, dash-join.
+_SLUG_RE = re.compile(r"[^a-z0-9]+")
+# Kind inference from tile text or context. Lower-priority than explicit
+# attribute on the tile.
+_KIND_KEYWORDS = {
+    "slingo":     ("slingo",),
+    "blackjack":  ("blackjack", "21"),
+    "roulette":   ("roulette",),
+    "slots":      ("slot", "slots", "spin"),
+}
+
+
+def _slugify(text: str) -> str:
+    return _SLUG_RE.sub("-", (text or "").lower()).strip("-")
+
+
+def _infer_kind(blob: str) -> Optional[str]:
+    blob = blob.lower()
+    for kind, keys in _KIND_KEYWORDS.items():
+        if any(k in blob for k in keys):
+            return kind
+    return None
+
+
+def extract_game_tiles(
+    elements: List[Dict[str, Any]],
+    *,
+    fallback_kind: Optional[str] = None,
+) -> List[Dict[str, str]]:
+    """Pull (slug, display_name, kind) tuples for each lobby tile.
+
+    Matches tiles by their resource-id substring (`game_tile` etc.). Slug
+    comes from the resource-id's last path segment when present, else from
+    the slugified display text. Kind is inferred from the tile blob; if the
+    blob is silent, falls back to caller-supplied `fallback_kind` (e.g.
+    derived from category screen context).
+
+    Returns at most one entry per slug; first occurrence wins.
+    """
+    out: Dict[str, Dict[str, str]] = {}
+    for el in elements:
+        rid = (el.get("resource-id") or "").lower()
+        if not any(s in rid for s in _TILE_ID_SUBSTRINGS):
+            continue
+        text = (el.get("text") or "").strip()
+        desc = (el.get("content-desc") or "").strip()
+        display = text or desc
+        if not display:
+            continue
+        slug_raw = rid.split("/")[-1] if "/" in rid else rid
+        slug = slug_raw or _slugify(display)
+        if not slug or slug in out:
+            continue
+        kind = _infer_kind(f"{display} {rid} {desc}") or fallback_kind
+        if not kind:
+            continue
+        out[slug] = {"slug": slug, "display_name": display, "kind": kind}
+    return list(out.values())
 
 
 # ── Signature matching ──────────────────────────────────────────────────

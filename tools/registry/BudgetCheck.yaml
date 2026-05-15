@@ -1,0 +1,9 @@
+name: BudgetCheck
+platforms: [android, ios, web]
+intents: [intent_play_game, intent_play_bonus]
+risk_tier: high
+side_effects: []
+description: |
+  Pre-action budget gate. Returns the first-firing terminal:
+  balance_unparseable > budget_exhausted > n_spins > max_minutes.
+  Env MAX_LOSS_USD is the hard ceiling (FR-003); prompt can only lower.

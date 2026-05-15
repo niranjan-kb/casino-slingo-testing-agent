@@ -21,7 +21,13 @@ from temporalio import activity
 # Importing the observers package triggers registration of v1 observers.
 from observers import tick                              # noqa: F401
 from observers.base import PersonaDialsView, ScreenContext
-from observers.screen_identity import compute_identity, extract_xml_text
+from observers.screen_identity import (
+    compute_identity,
+    extract_game_tiles,
+    extract_interactive_elements,
+    extract_xml_text,
+    parse_page_source,
+)
 
 
 _screen_db: Any = None
@@ -100,6 +106,12 @@ async def run_observers(payload: Dict[str, Any]) -> Dict[str, Any]:
         raw_xml, signatures
     )
 
+    # Parse once; reused by frontier (T043) + lobby-walk (T046) writers.
+    parsed_elements = parse_page_source(raw_xml)
+    _autorecord_frontier(novelty_key, parsed_elements)
+    _autorecord_lobby_walk(screen_id, parsed_elements)
+    _emit_token_metric(run_id, goal_id, last_tool, last_result, len(parsed_elements))
+
     novelty = novelty_key not in seen
     persona = _persona_view or PersonaDialsView()
 
@@ -160,3 +172,141 @@ async def run_observers(payload: Dict[str, Any]) -> Dict[str, Any]:
         f"observations={len(out_observations)}"
     )
     return {"observations": out_observations, "new_signature": new_sig}
+
+
+# ── Spec 005 T043: action-frontier auto-record ─────────────────────────
+
+
+def _autorecord_frontier(
+    screen_sig: Optional[str],
+    parsed_elements: list,
+) -> None:
+    """Insert one row per interactive element into screen_action_frontier.
+
+    Idempotent: INSERT-OR-IGNORE on (screen_sig, element_id). Subsequent
+    visits don't bump attempted_count — that happens via verify_tap.
+    Best-effort; FR-027 says observer-side failures must not halt the goal.
+    """
+    if _screen_db is None or not screen_sig or not parsed_elements:
+        return
+    try:
+        controls = extract_interactive_elements(parsed_elements)
+    except Exception as e:                                 # noqa: BLE001
+        activity.logger.warning(f"frontier extract raised: {e}")
+        return
+    for c in controls:
+        try:
+            _screen_db.upsert_screen_action_frontier(
+                screen_sig, c["element_id"],
+                side_effect=c["side_effect"],
+            )
+        except Exception as e:                             # noqa: BLE001 — FR-027
+            activity.logger.warning(
+                f"frontier upsert failed ({screen_sig[:16]}/{c.get('element_id','?')}): {e}"
+            )
+
+
+# ── Spec 005 T046: lobby-walk auto-discovery ───────────────────────────
+
+# Heuristic match: screen_id (when matched against signatures) suggests we
+# are on a lobby/category surface and should harvest game tiles. The list
+# is non-exhaustive on purpose — adding more lobby ids here is a one-line
+# change with no schema impact.
+_LOBBY_SCREEN_IDS = {
+    "home_lobby", "casino_home", "casino_lobby",
+    "lobby_home", "lobby_category", "casino_category",
+    "all_games", "popular_games", "new_games",
+}
+
+
+def _autorecord_lobby_walk(
+    screen_id: Optional[str],
+    parsed_elements: list,
+) -> None:
+    """Harvest visible game tiles into game_directory.
+
+    No-op unless the matched screen_id looks like a lobby/category screen
+    — otherwise we'd UPSERT non-tile text and pollute the directory.
+    """
+    if _screen_db is None or not screen_id:
+        return
+    if screen_id not in _LOBBY_SCREEN_IDS:
+        return
+    fallback_kind = None
+    if "slingo" in screen_id:
+        fallback_kind = "slingo"
+    elif "slots" in screen_id:
+        fallback_kind = "slots"
+    try:
+        tiles = extract_game_tiles(parsed_elements, fallback_kind=fallback_kind)
+    except Exception as e:                                 # noqa: BLE001
+        activity.logger.warning(f"lobby-walk extract raised: {e}")
+        return
+    if not tiles:
+        return
+    build_env = os.getenv("BUILD_ENV", "unknown")
+    app_version = os.getenv("APP_VERSION", "unknown")
+    for t in tiles:
+        try:
+            _screen_db.upsert_game_directory(
+                t["slug"], t["display_name"], t["kind"],
+                build_env=build_env, app_version=app_version,
+                seen_in_lobby=True,
+            )
+        except Exception as e:                             # noqa: BLE001 — FR-027
+            activity.logger.warning(
+                f"game_directory upsert failed ({t.get('slug','?')}): {e}"
+            )
+
+
+# ── Spec 005 T043 (continued): per-turn input-token metrics ────────────
+
+
+def _emit_token_metric(
+    run_id: str,
+    goal_id: str,
+    tool_name: Optional[str],
+    tool_result: Any,
+    n_elements: int,
+) -> None:
+    """Log a coarse input-token proxy for this tick into observation_log.
+
+    The frozen tool_activities.py is the only place that can read true
+    Anthropic token counts, so here we record the page-source size + a
+    rough char-to-token estimate (chars / 4). This gives the run-report
+    enough signal to flag prompt bloat regressions without touching the
+    frozen module.
+    """
+    if _screen_db is None:
+        return
+    try:
+        blob = json.dumps(tool_result, default=str) if tool_result else ""
+        chars = len(blob)
+        approx_tokens = chars // 4
+    except Exception:                                       # noqa: BLE001
+        return
+    try:
+        _screen_db.log_observer_observation(
+            "token_metric",
+            run_id=run_id,
+            goal_id=goal_id,
+            severity="info",
+            pass_fail="info",
+            matched=False,
+            auto_handle=False,
+            summary=f"tool={tool_name} chars={chars} ~tokens={approx_tokens} elements={n_elements}",
+            evidence_path=None,
+            spec_link=None,
+            failed_rule=None,
+            captured_json=json.dumps({
+                "tool": tool_name,
+                "result_chars": chars,
+                "approx_tokens": approx_tokens,
+                "n_elements": n_elements,
+            }),
+            sub_flow_json=None,
+            screen_signature=None,
+            screen_id=None,
+        )
+    except Exception as e:                                  # noqa: BLE001 — FR-027
+        activity.logger.warning(f"token_metric log failed: {e}")

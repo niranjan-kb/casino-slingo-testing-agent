@@ -38,3 +38,18 @@ bet-amount controls, bonus mini-games (free spins, pick-em, multipliers).
 ## Constraints
 Autoplay is NEVER engaged by the agent — it skips per-round BudgetCheck.
 Manual-spin only.
+
+## Provider variants
+Same kind, different chrome — UI layouts differ by provider, so per-game
+playbook rows carry the actual signatures. Major providers in this catalog:
+- **OGS** — top-vol Slingo + slot titles (Mice Heist, Royal Reels, Huff N
+  Puff series). Spin button typically bottom-centre; bet selector left.
+- **WHG** — branded slots (WrestleMania, Goonies, Megaways variants). Larger
+  bonus-intro animations; "Jackpot Royale" hold-and-win popups.
+- **IGT** — Cash Eruption family. Distinctive `MAX BET` chrome.
+- **GG (DGC)** — Drum Frenzy / Power Combo themes.
+- **PLAYTECH / PARIPLAY** — long tail.
+
+Per-game playbook is the source of truth for spin/bet locators and the
+balance regex. The kind file documents only what is universal across all
+variants.

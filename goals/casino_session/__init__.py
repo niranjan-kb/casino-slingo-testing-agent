@@ -13,13 +13,18 @@ from goals.casino_session.prompt_loader import (
 from models.tool_definitions import AgentGoal
 from shared.mcp_config import get_appium_mcp_server_definition
 from tools.tool_registry import (
+    slingo_budget_check_tool,
     slingo_detect_screen_tool,
     slingo_find_element_with_fallback_tool,
     slingo_lookup_coords_tool,
+    slingo_parse_session_intent_tool,
+    slingo_read_balance_tool,
+    slingo_resolve_directory_tool,
     slingo_save_evidence_tool,
     slingo_smart_tap_tool,
     slingo_tap_coordinate_tool,
     slingo_verify_tap_tool,
+    slingo_wait_for_signature_tool,
     slingo_wait_seconds_tool,
 )
 
@@ -35,6 +40,7 @@ _CASINO_SESSION_APPIUM_TOOLS = [
     "appium_alert",
     "appium_mobile_press_key",
     "appium_swipe",
+    "appium_scroll",  # T052 follow-up: intent_navigate_to_game's scroll-grid fallback
     "create_session",
     "delete_session",
     "select_device",
@@ -49,19 +55,27 @@ _CASINO_SESSION_LOCAL_TOOLS = [
     slingo_lookup_coords_tool,
     slingo_verify_tap_tool,
     slingo_save_evidence_tool,
+    # Spec 005 (T036–T040): play-flow QA tools.
+    slingo_parse_session_intent_tool,
+    slingo_resolve_directory_tool,
+    slingo_read_balance_tool,
+    slingo_budget_check_tool,
+    slingo_wait_for_signature_tool,
 ]
 
 
 goal_casino_session = AgentGoal(
     id="goal_casino_session",
     category_tag="casino-qa",
-    agent_name="Casino Session",
+    agent_name="Danny Ocean",
     agent_friendly_description=(
-        "Run a casino-app session end-to-end: authenticate, navigate to a game, "
-        "play, and report. Per-turn objective is driven by the intent registry "
-        "(intent_authenticate, intent_navigate_to_screen, intent_play_game, "
-        "intent_report). Platform-agnostic; learned coordinates are persisted per "
-        "platform/build in the screen-map DB."
+        "Run a casino-app session end-to-end. Per-turn objective is driven by "
+        "the intent registry, sequenced by graphs/casino_session.yaml: "
+        "intent_parse_session → intent_authenticate → intent_navigate_to_game → "
+        "intent_load_game_context → intent_play_game (with optional "
+        "intent_play_bonus branch) → intent_report. intent_navigate_to_screen "
+        "is also available for off-graph navigation. Platform-agnostic; learned "
+        "coordinates are persisted per platform/build in the screen-map DB."
     ),
     tools=list(_CASINO_SESSION_LOCAL_TOOLS),
     mcp_server_definition=get_appium_mcp_server_definition(

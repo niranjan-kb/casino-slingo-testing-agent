@@ -1,0 +1,10 @@
+name: WaitForSignature
+platforms: [android, ios]
+intents: [intent_play_game, intent_play_bonus, intent_load_game_context]
+risk_tier: low
+side_effects: [db_write]
+description: |
+  Learned-wait timeout: animation_timings p95+2σ when samples≥5; else
+  game_kinds/<kind>.md learned_default; else stable-UI fallback (DOM stable
+  for 800ms). Welford-online updates the per-(game,action,build,version)
+  stats table. Replaces hardcoded WaitSeconds(N) for animation waits.

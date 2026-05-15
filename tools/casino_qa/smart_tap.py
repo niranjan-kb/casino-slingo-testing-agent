@@ -3,6 +3,7 @@ import logging
 import os
 
 from ._deps import get_mcp_manager, get_screen_db
+from ._transition_recorder import record_outcome_safely
 from .detect_screen import detect_screen
 
 log = logging.getLogger(__name__)
@@ -121,6 +122,15 @@ async def smart_tap(args: dict) -> dict:
                     success=True,
                     app_context=app_context,
                 )
+                # T044: stochastic-outcomes mirror.
+                record_outcome_safely(
+                    db,
+                    start_sig=screen_name,
+                    action=f"tap:{element_name}",
+                    end_sig=current_screen,
+                    edge_kind="tap",
+                    outcome="success",
+                )
             else:
                 db.log_observation(
                     device_profile_id=profile_id,
@@ -152,6 +162,16 @@ async def smart_tap(args: dict) -> dict:
                             success=True,
                             app_context=app_context,
                         )
+                        # T044: divergent stochastic outcome — still a real
+                        # observed end_sig, just not the expected one.
+                        record_outcome_safely(
+                            db,
+                            start_sig=screen_name,
+                            action=f"tap:{element_name}",
+                            end_sig=current_screen,
+                            edge_kind="tap",
+                            outcome="verify_fail",
+                        )
         else:
             # Detection failed — still record the tap attempt
             db.record_tap_result(profile_id, app_context, screen_name, element_name, False)
@@ -169,6 +189,14 @@ async def smart_tap(args: dict) -> dict:
                 to_screen=expected_screen,
                 success=True,
                 app_context=app_context,
+            )
+            record_outcome_safely(
+                db,
+                start_sig=screen_name,
+                action=f"tap:{element_name}",
+                end_sig=expected_screen,
+                edge_kind="tap",
+                outcome="success",
             )
 
     return {

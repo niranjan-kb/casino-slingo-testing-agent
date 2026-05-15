@@ -1,3 +1,4 @@
+import json
 from datetime import timedelta
 from typing import Any, Deque, Dict
 
@@ -5,13 +6,27 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 from temporalio.exceptions import ActivityError
 
-from models.data_types import ConversationHistory, ToolPromptInput
+from models.data_types import (
+    AgentGoalWorkflowParams,
+    CombinedInput,
+    ConversationHistory,
+    ToolPromptInput,
+)
 from models.tool_definitions import AgentGoal, ToolDefinition
 from prompts.generators import (
+    _format_history as _compacted_history,
     generate_missing_args_prompt,
     generate_tool_completion_prompt,
 )
 from shared.config import TEMPORAL_LEGACY_TASK_QUEUE
+
+# Import inside the workflow sandbox is allowed because activities/tool_activities.py
+# only declares activity stubs at module load (no I/O). The reference is needed so
+# we dispatch the planner activity by method handle instead of a stringly-named
+# lookup (Temporal otherwise falls back to dynamic_tool_activity, which then
+# raises "Unknown tool: ToolActivities.agent_toolPlanner" — see T052 follow-up).
+with workflow.unsafe.imports_passed_through():
+    from activities.tool_activities import ToolActivities
 
 # Constants from original file
 TOOL_ACTIVITY_START_TO_CLOSE_TIMEOUT = timedelta(seconds=12)
@@ -128,8 +143,14 @@ async def handle_missing_args(
 
 
 def format_history(conversation_history: ConversationHistory) -> str:
-    """Format the conversation history into a single string."""
-    return " ".join(str(msg["response"]) for msg in conversation_history["messages"])
+    """Format the conversation history into a single string.
+
+    Routes through the spec 005 compactor (T024 XML strip + T027 history
+    compaction + 80-message cap). The previous naive `" ".join(...)` blew
+    past the Bedrock 200K-token prompt cap once page-source dumps started
+    accumulating during navigate/play intents.
+    """
+    return _compacted_history(conversation_history)
 
 
 def prompt_with_history(
@@ -161,24 +182,47 @@ async def continue_as_new_if_needed(
         summary_input = ToolPromptInput(
             prompt=summary_prompt, context_instructions=summary_context
         )
-        conversation_summary = await workflow.start_activity_method(
-            "ToolActivities.agent_toolPlanner",
+        conversation_summary_obj = await workflow.execute_activity_method(
+            ToolActivities.agent_toolPlanner,
             summary_input,
             schedule_to_close_timeout=LLM_ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT,
         )
+        # Planner returns a `plan_next_action` dict (next/tool/response/active_intent).
+        # AgentGoalWorkflowParams.conversation_summary expects a string, so we
+        # extract the response field (or fall back to JSON).
+        if isinstance(conversation_summary_obj, dict):
+            conversation_summary = (
+                conversation_summary_obj.get("response")
+                or conversation_summary_obj.get("summary")
+                or json.dumps(conversation_summary_obj, default=str)[:4000]
+            )
+        else:
+            conversation_summary = str(conversation_summary_obj or "")
         workflow.logger.info(f"Continuing as new after {max_turns} turns.")
         add_message_callback("conversation_summary", conversation_summary)
-        workflow.continue_as_new(
-            args=[
-                {
-                    "tool_params": {
-                        "conversation_summary": conversation_summary,
-                        "prompt_queue": prompt_queue,
-                    },
-                    "agent_goal": agent_goal,
-                }
+        # Pass the dataclass instance directly. Previously this used a nested dict,
+        # which Temporal's dataclass converter could not deserialize once
+        # `prompt_queue` was a Deque (TypeError: Failed converting field tool_params).
+        # Convert the Deque to a list for stable JSON encoding across the
+        # continue-as-new boundary.
+        # Spec 005 T052 follow-up: ensure the new run has something to chew on.
+        # The main loop blocks on `wait_condition(bool(prompt_queue) or ...)`, so
+        # an empty queue at CAN time leaves the post-CAN run idle forever.
+        carry = list(prompt_queue) if prompt_queue is not None else []
+        if not carry:
+            carry = [
+                "### Conversation continued from a prior run after summarisation. "
+                "Inspect the conversation_summary message above for context, then "
+                "pick the next active_intent and proceed."
             ]
+        next_input = CombinedInput(
+            tool_params=AgentGoalWorkflowParams(
+                conversation_summary=conversation_summary,
+                prompt_queue=carry,
+            ),
+            agent_goal=agent_goal,
         )
+        workflow.continue_as_new(args=[next_input])
 
 
 def prompt_summary_with_history(

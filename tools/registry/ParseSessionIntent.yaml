@@ -1,0 +1,10 @@
+name: ParseSessionIntent
+platforms: [android, ios, web]
+intents: [intent_parse_session]
+risk_tier: low
+side_effects: []
+description: |
+  Heuristic-first parser: free-text prompt → SessionIntent envelope per
+  contracts/session_intent.schema.json. Honours FR-003 (env hard ceiling on
+  max_loss_usd; prompts can lower never raise) and FR-004 (default bounds
+  max_spins=20 / max_minutes=10 on vague prompts).

@@ -113,6 +113,92 @@ slingo_generate_report_tool = ToolDefinition(
     ],
 )
 
+# ----- Spec 005: Casino game-play & verification suite tools -----
+
+slingo_parse_session_intent_tool = ToolDefinition(
+    name="ParseSessionIntent",
+    description=(
+        "Compile the operator's free-text prompt into a structured SessionIntent envelope "
+        "(flow / target / budget / terminal). Honours FR-003: env MAX_LOSS_USD is the hard "
+        "ceiling — a prompt-supplied loss budget is silently lowered to it, never raised. "
+        "Vague prompts get default max_spins=20 AND max_minutes=10 (FR-004). Run once at "
+        "session start, before authenticate."
+    ),
+    arguments=[
+        ToolArgument(name="prompt", type="string", description="The operator's free-text session prompt (e.g. 'play slingo')"),
+        ToolArgument(name="env_max_loss_usd", type="number", description="Env hard ceiling override (defaults to MAX_LOSS_USD)"),
+    ],
+)
+
+slingo_resolve_directory_tool = ToolDefinition(
+    name="ResolveDirectory",
+    description=(
+        "Pure-SQL resolver: free-text query → game_directory slug. Pipeline: exact_slug → "
+        "kind+LIKE → alias_match → token-set ratio. Returns top match + alternatives. "
+        "Zero hits → unresolved=true; caller (intent_navigate_to_game) falls through to "
+        "the search-bar branch with the literal query."
+    ),
+    arguments=[
+        ToolArgument(name="query", type="string", description="Free text from the operator"),
+        ToolArgument(name="kind", type="string", description="Optional kind filter (slots|slingo|blackjack|roulette|live_dealer)"),
+        ToolArgument(name="slug", type="string", description="Optional explicit slug for short-circuit lookup"),
+        ToolArgument(name="limit", type="number", description="Max alternatives to return (default 5, capped at 20)"),
+    ],
+)
+
+slingo_read_balance_tool = ToolDefinition(
+    name="ReadBalance",
+    description=(
+        "Extract the wallet balance from a page-source dump using the per-game playbook's "
+        "balance_signature + balance_regex. Failure increments balance_consecutive_failures "
+        "(BudgetCheck owns the balance_unparseable terminal at threshold 3). NO regex is "
+        "hardcoded here — patterns live in game_playbook, populated on first observation."
+    ),
+    arguments=[
+        ToolArgument(name="page_source", type="string", description="The appium_get_page_source result"),
+        ToolArgument(name="slug", type="string", description="Current game slug for playbook lookup"),
+        ToolArgument(name="balance_regex_override", type="string", description="Optional override (rare; ops only)"),
+        ToolArgument(name="balance_read_confidence", type="number", description="For retry budget; default 1.0"),
+    ],
+)
+
+slingo_budget_check_tool = ToolDefinition(
+    name="BudgetCheck",
+    description=(
+        "Pre-action budget gate. Returns the first-firing terminal in priority order: "
+        "balance_unparseable > budget_exhausted > n_spins > max_minutes. Env MAX_LOSS_USD "
+        "is the hard ceiling (FR-003). Call BEFORE every spin/hand/bet."
+    ),
+    arguments=[
+        ToolArgument(name="balance_now", type="number", description="Latest ReadBalance result"),
+        ToolArgument(name="balance_session_start", type="number", description="Recorded at session start"),
+        ToolArgument(name="max_loss_usd", type="number", description="Already env-clamped"),
+        ToolArgument(name="max_spins", type="number", description="Effective bound"),
+        ToolArgument(name="max_minutes", type="number", description="Effective bound"),
+        ToolArgument(name="spins_played", type="number", description="Running count"),
+        ToolArgument(name="session_started_at_iso", type="string", description="ISO-8601 UTC"),
+        ToolArgument(name="balance_consecutive_failures", type="number", description="For balance_unparseable terminal"),
+    ],
+)
+
+slingo_wait_for_signature_tool = ToolDefinition(
+    name="WaitForSignature",
+    description=(
+        "Compute the learned-wait timeout for a target signature. Uses animation_timings p95+2σ "
+        "when samples ≥ 5; falls back to game_kinds/<kind>.md learned_default; final fallback is "
+        "stable-UI detector (DOM stable for 800ms). Replaces hardcoded WaitSeconds(N) for "
+        "animation waits. Pass observed_ms to contribute a Welford-online sample."
+    ),
+    arguments=[
+        ToolArgument(name="game_slug", type="string", description="game_directory.slug"),
+        ToolArgument(name="action", type="string", description="'spin' | 'bonus_intro' | 'deal_card' | ..."),
+        ToolArgument(name="build_env", type="string", description="Runtime build_env (cert/test/prod-debug)"),
+        ToolArgument(name="app_version", type="string", description="App version string"),
+        ToolArgument(name="kind_default_ms", type="number", description="Fallback from kind file"),
+        ToolArgument(name="observed_ms", type="number", description="Optional sample to record"),
+    ],
+)
+
 # ----- System tools -----
 list_agents_tool = ToolDefinition(
     name="ListAgents",

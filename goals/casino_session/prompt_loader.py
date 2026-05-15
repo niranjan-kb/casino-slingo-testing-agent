@@ -32,13 +32,19 @@ def build_starter_prompt() -> str:
         else "OTP: I'll ask you when the SMS arrives."
     )
     return (
-        "Hello — I'm the **Casino QA Agent**, running a **goal_casino_session**.\n\n"
-        "I'll authenticate the casino app end-to-end: launch → dismiss pre-login modals → "
-        "Fanatics ONE 2-step (email → password) → OTP → confirm home.\n\n"
-        f"Email: `{env['TEST_EMAIL']}` | Password: configured | Build: `{env['BUILD_ENV']}` | "
+        "Hello — I'm **Danny Ocean**, running a **goal_casino_session**.\n"
+        "_\"Winning isn't the end. It's just the buy-in for the next hand.\"_\n\n"
+        "Send me a free-text session ask and I'll compile it into a SessionIntent, "
+        "authenticate, walk the lobby to your game, play within budget, and write "
+        "a run report. Examples:\n"
+        "- `play any blackjack`\n"
+        "- `play slingo for 5 spins`\n"
+        "- `play fanatics blackjack until I lose $2`\n"
+        "- `audit the casino lobby` (no betting)\n\n"
+        f"Account: `{env['TEST_EMAIL']}` | Build: `{env['BUILD_ENV']}` | "
         f"Platform: `{env['PLATFORM']}` | Resolution: `{env['DEVICE_RESOLUTION']}`\n"
         f"{otp_note}\n\n"
-        "Say `login` to start, or just say go."
+        "Send your prompt, or say `login` to do just the auth flow."
     )
 
 

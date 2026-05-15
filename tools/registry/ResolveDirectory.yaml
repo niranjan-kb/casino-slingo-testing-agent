@@ -1,0 +1,9 @@
+name: ResolveDirectory
+platforms: [android, ios, web]
+intents: [intent_navigate_to_game]
+risk_tier: low
+side_effects: []
+description: |
+  Pure-SQL resolver: query → game_directory slug. exact_slug → kind+LIKE →
+  alias_match → token-set ratio. K=0 → unresolved=true (caller falls through
+  to search-bar branch).

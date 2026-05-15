@@ -855,6 +855,171 @@ class ScreenMapDB:
         conn.commit()
         return cursor.rowcount > 0
 
+    # ── Spec 005: action frontier, transition outcomes, game directory ──
+
+    def upsert_screen_action_frontier(
+        self,
+        screen_sig: str,
+        element_id: str,
+        *,
+        side_effect: str = "idempotent",
+        attempted: bool = False,
+        succeeded: bool = False,
+    ) -> None:
+        """Insert/refresh a (screen, element) frontier row.
+
+        Called from the observer auto-recorder when a screen is first
+        revealed (every interactive element gets a row with attempted=0)
+        and updated when the element is actually exercised.
+        """
+        conn = self._get_conn()
+        ts = datetime.utcnow().isoformat() if attempted else None
+        conn.execute(
+            """INSERT INTO screen_action_frontier
+                   (screen_sig, element_id, attempted_count, succeeded_count,
+                    last_attempted_at, side_effect)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT(screen_sig, element_id) DO UPDATE SET
+                   attempted_count   = attempted_count + ?,
+                   succeeded_count   = succeeded_count + ?,
+                   last_attempted_at = COALESCE(?, last_attempted_at),
+                   side_effect       = excluded.side_effect""",
+            (
+                screen_sig, element_id,
+                int(attempted), int(succeeded), ts, side_effect,
+                int(attempted), int(succeeded), ts,
+            ),
+        )
+        conn.commit()
+
+    def upsert_transition_outcome(
+        self,
+        start_sig: str,
+        action: str,
+        end_sig: str,
+        *,
+        edge_kind: str = "tap",
+        side_effect: str = "idempotent",
+        precondition: Optional[str] = None,
+    ) -> None:
+        """Bump observed_count for a stochastic transition outcome row."""
+        conn = self._get_conn()
+        conn.execute(
+            """INSERT INTO transition_outcomes
+                   (start_sig, action, end_sig, observed_count, last_seen,
+                    edge_kind, side_effect, precondition)
+               VALUES (?, ?, ?, 1, ?, ?, ?, ?)
+               ON CONFLICT(start_sig, action, end_sig) DO UPDATE SET
+                   observed_count = observed_count + 1,
+                   last_seen      = excluded.last_seen,
+                   edge_kind      = excluded.edge_kind,
+                   side_effect    = excluded.side_effect,
+                   precondition   = COALESCE(excluded.precondition, precondition)""",
+            (start_sig, action, end_sig,
+             datetime.utcnow().isoformat(),
+             edge_kind, side_effect, precondition),
+        )
+        conn.commit()
+
+    def record_transition_observation_event(
+        self,
+        workflow_id: str,
+        start_sig: str,
+        action: str,
+        end_sig: str,
+        *,
+        build_env: str,
+        app_version: str,
+        outcome: str,
+        duration_ms: Optional[int] = None,
+    ) -> None:
+        """Append-only event log row behind transition_outcomes (data-model §8)."""
+        conn = self._get_conn()
+        conn.execute(
+            """INSERT INTO transition_observations
+                   (workflow_id, start_sig, action, end_sig,
+                    build_env, app_version, outcome, duration_ms)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (workflow_id, start_sig, action, end_sig,
+             build_env, app_version, outcome, duration_ms),
+        )
+        conn.commit()
+
+    def upsert_game_directory(
+        self,
+        slug: str,
+        display_name: str,
+        kind: str,
+        *,
+        aliases: Optional[List[str]] = None,
+        popularity: Optional[int] = None,
+        loaded_signature: Optional[str] = None,
+        build_env: str = "unknown",
+        app_version: str = "unknown",
+        seen_in_lobby: bool = True,
+    ) -> None:
+        """UPSERT a game_directory row from a lobby-walk discovery (T046).
+
+        On first sight: sets first_seen_in_lobby_at + last_seen_in_lobby_at.
+        On re-sight:    refreshes last_seen_in_lobby_at only.
+        """
+        conn = self._get_conn()
+        now = datetime.utcnow().isoformat()
+        first_seen = now if seen_in_lobby else None
+        last_seen = now if seen_in_lobby else None
+        # Pass NULL through the binding when the caller didn't supply a
+        # value, so COALESCE on UPDATE preserves whatever's there. Use a
+        # default for INSERT only by COALESCE'ing on the value side.
+        aliases_json = json.dumps(aliases) if aliases is not None else None
+        conn.execute(
+            """INSERT INTO game_directory
+                   (slug, display_name, kind, aliases_json, popularity,
+                    available, loaded_signature,
+                    first_seen_in_lobby_at, last_seen_in_lobby_at,
+                    build_env, app_version, updated_at)
+               VALUES (?, ?, ?, COALESCE(?, '[]'), COALESCE(?, 0), 1, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(slug) DO UPDATE SET
+                   display_name          = COALESCE(excluded.display_name, display_name),
+                   kind                  = COALESCE(excluded.kind, kind),
+                   aliases_json          = COALESCE(?, aliases_json),
+                   popularity            = COALESCE(?, popularity),
+                   loaded_signature      = COALESCE(excluded.loaded_signature, loaded_signature),
+                   last_seen_in_lobby_at = COALESCE(excluded.last_seen_in_lobby_at, last_seen_in_lobby_at),
+                   build_env             = excluded.build_env,
+                   app_version           = excluded.app_version,
+                   updated_at            = excluded.updated_at""",
+            (slug, display_name, kind,
+             aliases_json, popularity,
+             loaded_signature, first_seen, last_seen,
+             build_env, app_version, now,
+             aliases_json, popularity),
+        )
+        conn.commit()
+
+    def get_rounds_for_workflow(self, workflow_id: str) -> List[Dict[str, Any]]:
+        """All game_rounds rows logged under one workflow_id (for run-report)."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            """SELECT * FROM game_rounds
+               WHERE workflow_id = ?
+               ORDER BY started_at""",
+            (workflow_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_transitions_added_since(self, since_iso: str) -> List[str]:
+        """Return summary strings for transition_outcomes rows whose last_seen
+        is at-or-after `since_iso`. Used by run-report's `transitions_added`."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            """SELECT start_sig, action, end_sig
+               FROM transition_outcomes
+               WHERE last_seen >= ?
+               ORDER BY last_seen""",
+            (since_iso,),
+        ).fetchall()
+        return [f"{r['start_sig']} --{r['action']}--> {r['end_sig']}" for r in rows]
+
     def close(self) -> None:
         if hasattr(self._local, "conn") and self._local.conn:
             self._local.conn.close()

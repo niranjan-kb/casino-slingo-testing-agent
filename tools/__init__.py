@@ -1,13 +1,18 @@
 from .change_goal import change_goal
-from .slingo_qa import (
+from .casino_qa import (
+    budget_check,
     detect_screen,
     find_element_with_fallback,
     generate_report,
     lookup_coords,
+    parse_session_intent,
+    read_balance,
+    resolve_directory,
     save_evidence,
     smart_tap,
     tap_coordinate,
     verify_tap,
+    wait_for_signature,
     wait_seconds,
 )
 from .create_invoice import create_invoice
@@ -99,5 +104,17 @@ def get_handler(tool_name: str):
         return save_evidence
     if tool_name == "GenerateReport":
         return generate_report
+
+    # Spec 005 (T036–T040): play-flow QA tools.
+    if tool_name == "ParseSessionIntent":
+        return parse_session_intent
+    if tool_name == "ResolveDirectory":
+        return resolve_directory
+    if tool_name == "ReadBalance":
+        return read_balance
+    if tool_name == "BudgetCheck":
+        return budget_check
+    if tool_name == "WaitForSignature":
+        return wait_for_signature
 
     raise ValueError(f"Unknown tool: {tool_name}")

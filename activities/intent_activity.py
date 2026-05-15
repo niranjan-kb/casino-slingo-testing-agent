@@ -198,7 +198,11 @@ async def is_intent_reachable(payload: Dict[str, Any]) -> Dict[str, Any]:
     active_intent = payload.get("active_intent")
     completed = set(payload.get("completed_nodes") or [])
     if not active_intent:
-        return {"reachable": False, "target_node": None, "reason": "no_active_intent"}
+        # First-turn quiet case: the planner hasn't picked an intent yet.
+        # Treat as permissive instead of False — the guard's job is to block
+        # *bad* transitions, not to fail when there's nothing to check.
+        # Constitution III: never halt the goal loop on a no-op.
+        return {"reachable": True, "target_node": None, "reason": "no_active_intent"}
 
     # Find the node whose intent matches the requested active_intent. The plan
     # graph maps node-name → {intent: intent_id, requires: 'X.success'?, ...}.
@@ -215,6 +219,25 @@ async def is_intent_reachable(payload: Dict[str, Any]) -> Dict[str, Any]:
             "target_node": None,
             "reason": "intent_not_in_plan_graph",
         }
+
+    # Session-entry case: completed_nodes is empty (truly fresh session). Allow
+    # any candidate that lies on an entry path — i.e. its `requires` chain can
+    # be transitively satisfied via a node with NO `requires` (the entry node).
+    # This handles two real cases:
+    #   1. The goal flow runs `intent_authenticate` directly without first
+    #      running `intent_parse_session` (legacy auth-flow under casino_session).
+    #   2. Recovery routes (re-auth on session_lost) re-enter mid-flow.
+    # The strict-progression checks below only apply once at least one node has
+    # actually completed — otherwise every fresh session would block on
+    # whichever `requires: parse_session.success` node the planner picks first.
+    if not completed:
+        for name, defn in candidates:
+            if _is_on_entry_path(name, defn, nodes):
+                return {
+                    "reachable": True,
+                    "target_node": name,
+                    "reason": "session_start_entry_path",
+                }
 
     # Recovery and trigger nodes are always reachable when their condition fires
     # (e.g. `trigger: bonus_trigger_signature`); the workflow handles those out
@@ -234,6 +257,31 @@ async def is_intent_reachable(payload: Dict[str, Any]) -> Dict[str, Any]:
         "target_node": None,
         "reason": "preconditions_unmet",
     }
+
+
+def _is_on_entry_path(
+    node_name: str, defn: Dict[str, Any], nodes: Dict[str, Any], _depth: int = 0
+) -> bool:
+    """Return True if `node_name` is reachable via an unbroken chain of
+    `requires` predecessors that terminates at an entry node (no `requires`).
+
+    Used by the first-turn tolerance rule: when `completed_nodes` is empty,
+    any candidate on an entry path is permitted. This corresponds to the
+    intuition "the session is starting; let the natural entry flow run."
+
+    Recursion is bounded by the plan-graph node count to avoid pathological
+    cycles; in practice plans are tiny linear DAGs.
+    """
+    if _depth > len(nodes) + 1:
+        return False
+    requires = defn.get("requires")
+    if not requires:
+        return True
+    pred_name = requires.split(".", 1)[0]
+    pred_defn = nodes.get(pred_name)
+    if not pred_defn:
+        return False
+    return _is_on_entry_path(pred_name, pred_defn, nodes, _depth + 1)
 
 
 @activity.defn

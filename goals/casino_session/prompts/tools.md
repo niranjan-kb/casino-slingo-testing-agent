@@ -1,12 +1,13 @@
 # Tools
 
-You have **Appium MCP tools** (device interaction) and **local QA tools** (perception, screen-map, evidence).
+You have **Appium MCP tools** (device interaction) and **local QA tools** (perception, screen-map, session, evidence).
 
 ## Local QA Tools
 
 | Tool | Purpose | Key arguments |
 |------|---------|---------------|
-| `WaitSeconds` | Pause for N seconds (max 30) | `seconds` |
+| `WaitSeconds` | Pause for N seconds (max 30). **Legacy fixed-wait** — for animation/transition settles prefer `WaitForSignature` | `seconds` |
+| `WaitForSignature` | Block until a target signature appears (or DOM stable). Uses learned `animation_timings` p95+2σ when samples≥5, else kind default, else stable-UI detector | `signature`, `kind_default_ms?`, `timeout_ms?` |
 | `TapCoordinate` | Tap at raw pixel coords (no DB) | `x`, `y` |
 | `DetectScreen` | Identify which screen is showing via DB signatures | `app_context` |
 | `LookupCoords` | Look up stored coordinates for an element | `app_context`, `screen_name`, `element_name` |
@@ -14,6 +15,10 @@ You have **Appium MCP tools** (device interaction) and **local QA tools** (perce
 | `VerifyTap` | Confirm a tap caused expected transition | `app_context`, `screen_name`, `element_name`, `tapped_x`, `tapped_y`, `expected_screen` |
 | `SaveEvidence` | Save a screenshot as labeled evidence (for failures or proof) | `screenshot_path`, `label` |
 | **`FindElementWithFallback`** | **Try multiple (strategy, selector) candidates in ONE call** — first hit wins | `candidates` (list of `{strategy, selector}` dicts) |
+| **`ParseSessionIntent`** | Compile the operator's free-text prompt into a `SessionIntent{flow, target, budget, terminal}` envelope. **One-shot, runs at session start** | `prompt`, `env_max_loss_usd?` |
+| **`ResolveDirectory`** | Free-text query → `game_directory` slug (exact → kind+LIKE → alias → token-set Jaccard). Pure SQLite, deterministic | `query?`, `kind?`, `slug?`, `limit?` |
+| **`ReadBalance`** | Parse the on-screen balance via `playbook.balance_signature` + `balance_regex`. Retries up to `min(3, ceil(1/conf))` | `playbook_slug` |
+| **`BudgetCheck`** | Pre-action gate. First-of-many terminal: `balance_unparseable` > `budget_exhausted` > `n_spins` > `max_minutes` | `balance_now`, `balance_session_start`, `spins_played`, `max_loss_usd`, `max_spins`, `max_minutes`, `session_started_at_iso`, `now_iso` |
 
 ### Always prefer FindElementWithFallback over raw appium_find_element
 

@@ -1,6 +1,8 @@
-# Fanatics Casino QA Agent
+# Fanatics Casino QA Agent — Danny Ocean
 
-An AI **casino game player** that plays Fanatics Casino games end-to-end on real Android devices and reports anything that looks broken — like a real player would, but never sleeps. Built on **Temporal** for visibility (every screen, every tap, every decision is a workflow event in the Temporal UI) and durability (worker crashes mid-spin replay to the exact step).
+An AI **casino game player** named **Danny Ocean** that plays Fanatics Casino games end-to-end on real Android devices and reports anything that looks broken — like a real player would, but never sleeps. Built on **Temporal** for visibility (every screen, every tap, every decision is a workflow event in the Temporal UI) and durability (worker crashes mid-spin replay to the exact step).
+
+> *"Winning isn't the end. It's just the buy-in for the next hand."* — Danny Ocean
 
 Player-first, QA-aware. The agent doesn't pretend to be a tester — it plays the games, observes outcomes, and reports anything that feels off. The QA report falls out of the play session as a side effect.
 

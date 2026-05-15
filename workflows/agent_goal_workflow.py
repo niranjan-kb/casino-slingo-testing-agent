@@ -250,7 +250,15 @@ class AgentGoalWorkflow:
                         | set((self.mcp_tools_info.get("tools") or {}).keys())
                     )
 
-                allowed_intent_ids = sorted(_INTENT_REGISTRY.keys())
+                # Spec 005 T052 follow-up: exclude already-completed intents from
+                # the planner's active_intent enum so the LLM cannot loop on a
+                # finished phase. intent_report is the canonical session terminator
+                # so we keep it visible even after it has fired (no-op since the
+                # done handler ends the workflow when intent_report completes).
+                allowed_intent_ids = sorted(
+                    i for i in _INTENT_REGISTRY.keys()
+                    if i == "intent_report" or i not in self.completed_intents
+                )
 
                 prompt_input = ToolPromptInput(
                     prompt=prompt,
@@ -371,6 +379,39 @@ class AgentGoalWorkflow:
                 # else if the next step is to be done with the conversation such as if the user requests it via asking to "end conversation"
                 elif next_step == "done":
                     self.add_message("agent", tool_data)
+
+                    # Spec 005 T052 follow-up: if the planner re-emitted `done`
+                    # for an intent that's already completed (and the plan-graph
+                    # guard correctly kept self.active_intent at None), do NOT
+                    # fall through to session-end. Re-prompt with a stronger
+                    # directive so the LLM advances to the next intent.
+                    claimed = tool_data.get("active_intent")
+                    if (
+                        self.active_intent is None
+                        and claimed
+                        and claimed in self.completed_intents
+                    ):
+                        remaining = [
+                            i for i in _INTENT_REGISTRY.keys()
+                            if i not in self.completed_intents
+                        ]
+                        workflow.logger.info(
+                            f"planner re-emitted done for already-completed '{claimed}'; "
+                            f"re-prompting with remaining={remaining}"
+                        )
+                        self.prompt_queue.append(
+                            f"### '{claimed}' is already complete and CANNOT be re-emitted. "
+                            f"Pick the next active_intent from this list: {remaining}. "
+                            f"Or emit next='done' with active_intent=intent_report to wrap up."
+                        )
+                        await helpers.continue_as_new_if_needed(
+                            self.conversation_history,
+                            self.prompt_queue,
+                            self.goal,
+                            MAX_TURNS_BEFORE_CONTINUE,
+                            self.add_message,
+                        )
+                        continue
 
                     # Intent-level done: an intent reports completion; the session
                     # continues until either intent_report is the completing one

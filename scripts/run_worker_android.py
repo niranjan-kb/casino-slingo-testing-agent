@@ -22,7 +22,11 @@ from temporalio.worker import Worker  # noqa: E402
 from activities.intent_activity import (  # noqa: E402
     find_games_for_intent,
     get_play_loop,
+    is_intent_reachable,
     list_intent_registry_summary,
+    load_runtime_facts_activity,
+    record_intent_transition,
+    set_plan_graph,
     set_screen_db as set_intent_screen_db,
 )
 from activities.observer_activity import (  # noqa: E402
@@ -40,7 +44,7 @@ from observers.persona import load_persona_dials  # noqa: E402
 from shared.config import TEMPORAL_TASK_QUEUE, get_temporal_client  # noqa: E402
 from shared.mcp_client_manager import MCPClientManager  # noqa: E402
 from shared.screen_map_db import ScreenMapDB  # noqa: E402
-from tools.slingo_qa._deps import set_mcp_manager, set_screen_db  # noqa: E402
+from tools.casino_qa._deps import set_mcp_manager, set_screen_db  # noqa: E402
 from workflows.agent_goal_workflow import AgentGoalWorkflow  # noqa: E402
 
 
@@ -120,6 +124,32 @@ async def main():
     intent_count = len(load_registry())
     print(f"Intent layer: {intent_count} intents in registry")
 
+    # Spec 005 (T016 / T031): plan-graph guard wiring. The activity reads its
+    # graph via a module-level singleton set at worker startup (replay-safe —
+    # same file on disk yields the same dict every restart). Workflows decide
+    # whether to consult the guard based on their own `plan_graph` state, so
+    # registering the graph here is harmless for goals that don't use it.
+    try:
+        import yaml  # noqa: E402
+
+        graphs_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "graphs")
+        plan_graph_loaded = None
+        # Convention: the casino-session goal loads graphs/casino_session.yaml.
+        # Other goals can wire their own with one row in this dict.
+        plan_graph_path = os.path.join(graphs_dir, "casino_session.yaml")
+        if os.path.isfile(plan_graph_path):
+            with open(plan_graph_path) as f:
+                plan_graph_loaded = yaml.safe_load(f)
+        if plan_graph_loaded:
+            set_plan_graph(plan_graph_loaded)
+            print(f"Plan graph: {len(plan_graph_loaded.get('nodes', {}))} nodes loaded")
+        else:
+            print("Plan graph: none (legacy goal mode)")
+    except Exception as exc:
+        # Failing to load the plan graph must NOT block worker startup —
+        # the workflow guard falls open per Constitution III.
+        print(f"Plan graph load skipped: {exc}")
+
     client = await get_temporal_client()
     activities = ToolActivities(mcp_client_manager)
 
@@ -143,6 +173,11 @@ async def main():
                     find_games_for_intent,
                     get_play_loop,
                     list_intent_registry_summary,
+                    # Spec 005 (T016, T031, T013-thread): plan-graph guard,
+                    # RuntimeFacts envelope, intent transition log.
+                    is_intent_reachable,
+                    load_runtime_facts_activity,
+                    record_intent_transition,
                 ],
                 activity_executor=activity_executor,
             )

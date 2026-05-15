@@ -1,0 +1,10 @@
+name: ReadBalance
+platforms: [android, ios]
+intents: [intent_play_game, intent_play_bonus]
+risk_tier: low
+side_effects: []
+description: |
+  Extract wallet balance from page-source via the per-game playbook's
+  balance_signature + balance_regex. ≤3 retries; failure increments the
+  workflow's balance_consecutive_failures counter (BudgetCheck owns the
+  balance_unparseable terminal at threshold 3).

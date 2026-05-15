@@ -3,29 +3,37 @@ id: intent_play_game
 end_state_signatures:
   - home
   - home_lobby
-success_check: "exit condition from the prompt is met (budget bound, time bound, or loss-streak) AND the agent has safely exited back to the lobby"
+  - lobby_home
+success_check: "BudgetCheck has emitted a terminal AND the agent has exited safely back to a lobby signature"
 guardrails:
-  - "respect SHOW_CONFIRM at financial boundaries — bets, deposits, withdrawals require human confirm in cert/prod"
-  - "stake at the minimum unless the prompt says otherwise; never tap stake_adjuster blindly"
-  - "monitor balance after every spin — record observation if it diverges from expected delta by more than the stake"
-  - "≥5 consecutive spin-tap failures → SaveEvidence and STOP, do not drain the balance"
-  - "if the game crashes or freezes (no balance update, no animation), SaveEvidence with label 'play_freeze' and exit"
+  - "respect SHOW_CONFIRM at financial boundaries (cert/prod require human confirm)"
+  - "stake at minimum unless SessionIntent says otherwise; never tap stake_adjuster blindly"
+  - "round shape: ReadBalance → BudgetCheck → action → WaitForSignature → record_round (always in this order)"
+  - "ReadBalance retry budget ≤ 3; all-fail → terminal=balance_unparseable + SaveEvidence"
+  - "≥5 consecutive failures on one screen → SaveEvidence + STOP (Constitution IV)"
+  - "buy-extra-spins HARD decline unless playbook.recovery_json.allow_buy_spins=true"
+  - "autoplay NEVER engaged — bypasses per-round BudgetCheck"
+  - "on bonus_trigger_signature, plan-graph routes to intent_play_bonus; do not handle inline"
 risk_tier: HIGH
-notes: "Generic spin-loop driver. Per-game data lives in game_catalog.play_loop_json (R3); no per-game intent files."
+notes: "Spec 005 T035. Generic round-loop driver. Per-game in game_playbook (data); per-kind in game_kinds/<kind>.md."
 ---
 
 # intent_play_game
 
-You are playing the currently-loaded game until an exit condition is met, then exiting safely back to the lobby. The exit condition is parsed from the user's session prompt — typical forms: `loss_bound:1.00` (stop after losing $1), `session_seconds:600` (stop after 10 min), `loss_streak:5` (stop after 5 losing rounds in a row).
+Play the loaded game one round at a time until BudgetCheck signals terminal, then exit safely to the lobby.
 
-## How to proceed
+## Round loop (order matters)
 
-1. Confirm the loaded game by detecting its `loaded_signature`. If the catalog has a `play_loop_json`, follow its `actions_per_round` (e.g. `["spin"]` for slots, `["hit","stand"]` for blackjack); otherwise default to `["spin"]`.
-2. Read the starting balance and stake. Adjust stake to the strategy in `play_loop_json` (default: minimum).
-3. Round loop: take each action; verify the round resolves (animation ends, balance updates); record win/loss via observation_log; check exit condition.
-4. When the exit condition fires, exit the game safely — back out via the recorded transition; if the FanCash / "Keep Playing?" prompt appears, dismiss it and confirm landing back on the lobby.
-5. Emit `next='done'` once the lobby signature is matched.
+1. **ReadBalance** via `playbook.balance_signature` + `balance_regex`. ≤3 retries; all-fail → terminal=balance_unparseable.
+2. **BudgetCheck** with `(balance_now, balance_session_start, SessionIntent.budget)` → `{terminal: <reason>}` or `{terminal: null}`. Env hard ceiling honoured.
+3. **Action** from `playbook.actions_json`: slots/Slingo → `spin`; blackjack → per-hand `hit`/`stand`/`double`/`split`; roulette → `place_bet` only if window ≥`min_bet_window_ms`. **First-launch (playbook.actions_json is empty)**: derive the action button via `FindElementWithFallback` against the kind's HIGH-risk element names (e.g. slots → `spin_button`, blackjack → `hit_button`/`stand_button`, roulette → grid cells). Once the selector resolves, the auto-recorder writes it back into `screen_elements` and the next round reuses it — no manual playbook writes needed.
+4. **WaitForSignature** for `playbook.round_end_signature`. Timeout = learned `p95+2σ` (samples≥5) → kind `learned_default` → stable-UI detector (DOM stable 800ms).
+5. **Record round** in `game_rounds`: bet, balance_before/after, outcome, evidence on failure.
 
-## Catalog growth
+## Terminal handling
 
-If the game is new (no catalog row), the navigate intent should have created a stub. Update `play_loop_json` only if you've inferred a working loop. Do not invent strategies for games you've never played.
+When terminal fires: SaveEvidence with the terminal reason, back out via the recorded transition; decline any "Keep Playing?" prompt; emit `next='done'` once a lobby signature matches.
+
+## Scope
+
+Round loop only. No deposits, withdrawals, KYC. Low-balance modals → dismiss per `auto_dismiss_signatures`; BudgetCheck owns terminal, not modals.

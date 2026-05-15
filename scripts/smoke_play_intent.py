@@ -35,6 +35,19 @@ WORKER_LOG = "/tmp/android-worker.log"
 APP_PACKAGE = os.getenv("APP_PACKAGE", "com.betfanatics.casino.test")
 DEFAULT_PROMPT = "play any slingo game till you lose $1"
 
+# Spec 005 T047: --game shortcut → canonical prompt. Kept tiny on purpose;
+# the goal is operator convenience, not exhaustive coverage. Prompts deliberately
+# omit the "fanatics" brand prefix so the resolver leans on kind + popularity
+# rather than memorising one provider's naming. Unknown slugs template to
+# `play any <slug>`.
+_GAME_PROMPTS: dict = {
+    "spin_to_win":     "play any spin to win game",
+    "blackjack":       "play any blackjack",
+    "slingo_classic":  "play slingo classic",
+    "slingo":          "play any slingo",
+    "roulette":        "play any roulette",
+}
+
 # Required completion order. Reports completion is the session-end signal.
 EXPECTED_TERMINAL = "intent_report"
 ALL_EXPECTED = [
@@ -86,10 +99,30 @@ def _get_completed_intents() -> Optional[List[str]]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--timeout", type=int, default=600, help="seconds to wait for terminal state")
-    parser.add_argument("--prompt", default=DEFAULT_PROMPT, help="session prompt to send")
+    parser.add_argument("--prompt", default=None, help="session prompt to send (overrides --game)")
+    parser.add_argument(
+        "--game",
+        default=None,
+        help=("game slug shortcut: maps to a canonical prompt. Known slugs: "
+              + ", ".join(sorted(_GAME_PROMPTS)) + ". Any other value templates "
+              "to 'play any <slug>'. Ignored when --prompt is also given."),
+    )
     parser.add_argument("--require-all", action="store_true",
                         help="require ALL four intents to complete (default: just intent_report)")
+    parser.add_argument(
+        "--clear-state", action="store_true",
+        help="adb pm clear the casino app before starting (default: KEEP state to "
+             "skip pre-login modals + auth — useful for iterating on post-auth flows)",
+    )
     args = parser.parse_args()
+
+    if args.prompt:
+        prompt = args.prompt
+    elif args.game:
+        prompt = _GAME_PROMPTS.get(args.game) or f"play any {args.game.replace('_', ' ')}"
+    else:
+        prompt = DEFAULT_PROMPT
+    args.prompt = prompt
 
     if not _check_api_up():
         print(f"[smoke-intent] api not reachable at {API}", file=sys.stderr)
@@ -101,9 +134,12 @@ def main() -> int:
         print(f"[smoke-intent] worker log not found at {WORKER_LOG}", file=sys.stderr)
         return 1
 
-    print(f"[smoke-intent] resetting app: {APP_PACKAGE}")
-    subprocess.run(["adb", "shell", "am", "force-stop", APP_PACKAGE], check=True)
-    subprocess.run(["adb", "shell", "pm", "clear", APP_PACKAGE], check=True)
+    if args.clear_state:
+        print(f"[smoke-intent] CLEARING app data + force-stopping: {APP_PACKAGE}")
+        subprocess.run(["adb", "shell", "am", "force-stop", APP_PACKAGE], check=True)
+        subprocess.run(["adb", "shell", "pm", "clear", APP_PACKAGE], check=True)
+    else:
+        print(f"[smoke-intent] preserving app state (use --clear-state for cold-start)")
 
     log_offset = os.path.getsize(WORKER_LOG)
 
