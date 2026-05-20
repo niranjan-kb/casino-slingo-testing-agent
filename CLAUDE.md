@@ -1,32 +1,35 @@
 # Casino QA Agent (Danny Ocean) — Engineering Guide
 
-Last updated: 2026-05-11
+Last updated: 2026-05-15
 
 > **Single source of truth** for AI coding assistants (Claude Code, Codex, Cursor, etc.) and humans. The runtime agent is named **Danny Ocean**: *"Winning isn't the end. It's just the buy-in for the next hand."* The runtime persona lives in [`prompts/persona/soul.md`](prompts/persona/soul.md). The runtime topology diagram lives in [agent-harness.md](agent-harness.md).
 
 > **Self-healing is non-negotiable.** The agent must never get stuck.
 
+## Use the temporal CLI to debug the agent! 
+
 ## tl;dr for an AI editor
 
 - **Danny Ocean** — a **casino game player** built on Temporal for visibility + durability. Player-first, QA-aware.
-- **One agent, intents at runtime.** A single `AgentGoalWorkflow` picks an `active_intent` per turn from a closed-set registry of 7 — spec-004 (`intent_authenticate`, `intent_navigate_to_screen`, `intent_play_game`, `intent_report`) + spec-005 (`intent_parse_session`, `intent_navigate_to_game`, `intent_load_game_context`). New flows = new intent files. New games = `game_directory` + auto-populated `game_playbook` rows (per-game data, NOT code). New game *family* = a `game_kinds/<kind>.md` file. No goal-per-task code.
+- **One agent, intents at runtime.** A single `AgentGoalWorkflow` picks an `active_intent` per turn from a closed-set registry of 8 — spec-004 (`intent_authenticate`, `intent_navigate_to_screen`, `intent_play_game`, `intent_report`) + spec-005 (`intent_parse_session`, `intent_navigate_to_game`, `intent_load_game_context`, `intent_play_bonus`). New flows = new intent files. New games = `game_directory` + auto-populated `game_playbook` rows (per-game data, NOT code). New game *family* = a `game_kinds/<kind>.md` file. No goal-per-task code.
 - **Map primary, LLM fallback.** Every action: lookup `(app_pkg, build_env, resolution, screen_sig) → intent` in `data/screen_map.db`; deterministic tap; verify; only fall back to LLM/visual on miss. Every successful step writes back.
 - Output is **structurally enforced** via Anthropic tool-use forcing on the synthetic `plan_next_action` tool. Do NOT regress to prompt-prayer JSON.
 - **Self-healing is non-negotiable.** Never set `next='question'` for routine recovery — try alternative selector strategies first; ASK-USER-OTP only in cert/prod.
 
-## Mental model — one persona, seven intents
+## Mental model — one persona, eight intents
 
 The persona (SOUL) is shared. The agent composes **intents** at runtime — the LLM picks the active intent each turn from a closed-set enum.
 
 | Intent id | What it does | Status |
 |---|---|---|
-| **`intent_authenticate`** | Launch app → dismiss modals → Fanatics ONE 2-step login → OTP → confirm logged-in home/lobby | ✅ Locked 2026-04-29 |
-| **`intent_navigate_to_screen`** | Generic from-any-screen → target signature. Used for non-play targets (settings/account/support) | ✅ spec 004 |
-| **`intent_play_game`** | Generic round-loop driver: ReadBalance → BudgetCheck → action → WaitForSignature → record_round. Per-game data lives in `game_playbook` (auto-populated). | ✅ spec 004 / refined spec 005 |
-| **`intent_report`** | Write `reports/YYYY-MM-DD-<run>.{md,json}` (timeline, rounds, optimisations panel, operator-action queue). Session terminator. | ✅ spec 004 |
-| **`intent_parse_session`** | Compile vague prompt → `SessionIntent` envelope (flow / target / budget / terminal). One-shot at session start. FR-003 hard ceiling enforced. | 🆕 spec 005 |
-| **`intent_navigate_to_game`** | Lobby walk to a target game's `loaded_signature`: ordered fallback recents → category → search → scroll. | 🆕 spec 005 |
-| **`intent_load_game_context`** | On `game_loaded` signature: inject playbook + `game_kinds/<kind>.md` (combined ≤600 tokens) as L4 prompt layer. | 🆕 spec 005 |
+| **`intent_authenticate`** | Launch app → dismiss modals → Fanatics ONE 2-step login → OTP → confirm logged-in home/lobby | ✅ Locked 2026-04-29; verified live through T052 |
+| **`intent_navigate_to_screen`** | Generic from-any-screen → target signature. Used for non-play targets (settings/account/support). Tightening in 006. | ✅ spec 004 |
+| **`intent_play_game`** | Generic round-loop driver: ReadBalance → BudgetCheck → action → WaitForSignature → record_round. Per-game data lives in `game_playbook` (auto-populated). First-launch bootstrap uses kind-file HIGH-risk element names. | ✅ spec 004 / refined spec 005 |
+| **`intent_report`** | Write `reports/YYYY-MM-DD-<run>.{md,json}` (timeline, rounds, optimisations panel, operator-action queue). Session terminator. ⚠️ Known issue: LLM skips `GenerateReport` call — workflow-side enforcement pending. | ✅ spec 004 |
+| **`intent_parse_session`** | Compile vague prompt → `SessionIntent` envelope (flow / target / budget / terminal). One-shot at session start. FR-003 hard ceiling enforced. | ✅ spec 005, first-live 2026-05-14 (T052 v9) |
+| **`intent_navigate_to_game`** | Lobby walk to a target game's `loaded_signature`: ordered fallback recents → category → search → scroll. **⚠️ Reasoning gap**: agent short-circuits on `ResolveDirectory unresolved`. Hardening + app_structure prompt in **spec 006**. | 🚧 spec 005 / 006 in flight |
+| **`intent_load_game_context`** | On `game_loaded` signature: inject playbook + `game_kinds/<kind>.md` (combined ≤600 tokens) as L4 prompt layer. | 🆕 spec 005 (not yet live — blocked by navigate_to_game) |
+| **`intent_play_bonus`** | Branch from `intent_play_game` when a `bonus_trigger_signature` fires. Frozen wager, ≤30 actions, returns to base on the kind's loaded signature. | 🚧 stub (spec 005 / US5); full body lands when first slingo/live-show bonus is exercised |
 
 A goal (`goal_casino_session`) is the workflow's session config — tool list + MCP server + starter prompt. An intent is the LLM's per-turn objective (declarative end-state, success check, guardrails). One goal per workflow; many intents over its lifetime. See [agent-harness.md](agent-harness.md) for the full diagram.
 
@@ -140,6 +143,10 @@ uv run scripts/smoke_play_intent.py --timeout 600
 | [agent-harness.md](agent-harness.md) | Runtime topology diagram (ASCII + Mermaid) |
 | [.specify/memory/constitution.md](.specify/memory/constitution.md) | Architecture rules and target matrix (v3.0.0) |
 | [specs/004-nav-graph-intents/](specs/004-nav-graph-intents/) | Intent layer spec, plan, contracts |
+| [specs/005-casino-game-play-suite/](specs/005-casino-game-play-suite/) | Game-play suite spec (in flight) — parse_session/navigate_to_game/load_context/play_game refinement |
+| [specs/006-app-navigation/](specs/006-app-navigation/) | **Next delivery** — reliable game-find + general app navigation + `app_structure.md` prompt layer |
+| [fancash_spins.md](fancash_spins.md) | Reference doc on the FanCash Spins / "spin to win" daily-bonus feature (bottom-nav entry, not a regular game tile) |
+| [games.md](games.md) | Top-100 games catalogue + state availability (MI/PA/NJ/WV); informs `game_directory` and kind taxonomy |
 | Project memory (`~/.claude/.../memory/`) | Cross-session feedback rules |
 
 ## Active Technologies
@@ -149,6 +156,10 @@ uv run scripts/smoke_play_intent.py --timeout 600
 - SQLite at `data/screen_map.db` is the runtime source of truth (Principle I). Tables added below in §"Project Structure → Data". Markdown files in `intents/` and `game_kinds/` are declarative spec only (≤600 / ≤400 tokens). No JSON seed files for game playbooks (the playbook auto-populates). (005-casino-game-play-suite)
 
 ## Recent Changes
+- **006-app-navigation (draft)**: scoped delivery for reliable game-find + general app navigation. New `prompts/persona/app_structure.md` layer (cacheable, ≤800 tokens), `intent_navigate_to_game.md` hardening (no short-circuit on `ResolveDirectory unresolved`; ≥1 verified tap before `next=done`), `intent_navigate_to_screen.md` recovery anchors, lobby-walk auto-discovery patches (`_LOBBY_SCREEN_IDS` += `home`; `_TILE_ID_SUBSTRINGS` += Fanatics' real tile rids), and `extract_game_tiles` slug-collision fix. See [specs/006-app-navigation/feature_request.md](specs/006-app-navigation/feature_request.md).
+- **2026-05-14 — T052 v9 live evidence**: full 4-intent chain (`parse_session → authenticate → navigate_to_game → report`) ran end-to-end on the test build (run id `86fc0d35-b3c7-4ac6-b8dc-226d46185151`) with zero crashes. Auth + parse_session now considered stable. Game-find gap is the new gating step. Five latent workflow bugs caught + fixed during the v5→v8 cycle (summarizer dispatch, format_history compaction, CombinedInput dataclass, summary string-coerce, CAN carry-prompt) — long-context post-auth workflow path now exercised.
+- **2026-05-14 — prompt-stack hardening**: 8 C/H audit items fixed in one pass — `goal_casino_session/prompts/user.md` rewritten from auth-only to session-scope; `agent_friendly_description` updated to list all 8 intents; starter prompt now invites free-text session asks; `appium_scroll` added to whitelist; `system_back` references replaced with `appium_mobile_press_key key="BACK"`; `intent_play_game` first-launch bootstrap clarified; `intent_play_bonus.md` stubbed; `tools.md` extended to cover all 13 local tools; 8 tool-registry YAMLs cleaned of dangling `intent_explore` references.
+- **Game-kind restructure**: 8 kinds now in `game_kinds/` — `slingo`, `slots` (with provider-variants section), `blackjack` (RNG), `roulette` (RNG), `live_blackjack`, `live_roulette`, `baccarat`, `live_show`. Each documents the EVONET-unavailable-in-WV jurisdiction guard. `spin-to-win.md` moved to repo-root `fancash_spins.md` (Daily Spin is a bottom-nav daily-bonus feature, not a game-kind).
 - **005-casino-game-play-suite (in flight)**: directory/playbook split for game data (`game_directory` pre-launch + `game_playbook` post-launch, auto-populated — replaces `game_catalog`); plan-graph guard on intent transitions (`graphs/casino_session.yaml`, loaded module-level per worker); 5 new tools — `ParseSessionIntent` / `ResolveDirectory` / `ReadBalance` / `BudgetCheck` / `WaitForSignature` (Welford-online learned-wait, animation_timings keyed on build_env+app_version per FR-021); planner-prompt overhaul T024–T027 (page-source XML stripped from history, intent-conditional tool filter via `tools/registry/*.yaml`, L4 game-knowledge layer, last-N=2 verbatim + summarised history). Live measured: −39% wall-clock at constant LLM-call count.
 - **Repo-rename**: `tools/slingo_qa/` → `tools/casino_qa/` (now hosts all casino-game tools, not just Slingo). Legacy `goals/slingo_qa_android/` is slated for removal in T109 (after US1 ships green).
 - 004-nav-graph-intents: Added Python 3.10 (existing `.venv` via `uv`) + `temporalio` (durable workflow spine), `litellm` → AWS Bedrock (`claude-sonnet-4-5`), `pyyaml`, MCP via SSE (`appium-mcp@1.56.3` PINNED per MCP-2), `appium-mcp` over `httpx` for SSE

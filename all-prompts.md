@@ -1,5 +1,7 @@
 Here's the complete prompt-layer inventory, organized by where each file plugs into the planner prompt assembly (generate_genai_prompt in prompts/generators.py).
 
+Also: @app_structure.md
+
 L0 — Persona / Identity (cacheable prefix)
 Path	Role
 prompts/persona/soul.md	Danny Ocean's identity, values, vibe — the who

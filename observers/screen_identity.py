@@ -19,7 +19,7 @@ from __future__ import annotations
 import hashlib
 import re
 import xml.etree.ElementTree as ET
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 
 # Confidence threshold for treating a screen as matched. Below this, the
@@ -223,21 +223,37 @@ def extract_game_tiles(
     elements: List[Dict[str, Any]],
     *,
     fallback_kind: Optional[str] = None,
+    tile_patterns: Optional[Iterable[str]] = None,
 ) -> List[Dict[str, str]]:
     """Pull (slug, display_name, kind) tuples for each lobby tile.
 
-    Matches tiles by their resource-id substring (`game_tile` etc.). Slug
-    comes from the resource-id's last path segment when present, else from
-    the slugified display text. Kind is inferred from the tile blob; if the
-    blob is silent, falls back to caller-supplied `fallback_kind` (e.g.
-    derived from category screen context).
+    Matches tiles by their resource-id substring. Substring list comes from
+    `tile_patterns` when supplied (spec 006 — the activity passes the
+    DB-fetched list so adding a new lobby tile rid is a one-row seed);
+    otherwise falls back to the legacy module-level `_TILE_ID_SUBSTRINGS`
+    for pure-function callers and tests.
+
+    Slug comes from the resource-id's last path segment when present, else
+    from the slugified display text. Kind is inferred from the tile blob;
+    if the blob is silent, falls back to caller-supplied `fallback_kind`
+    (e.g. derived from category screen context).
 
     Returns at most one entry per slug; first occurrence wins.
     """
+    patterns = tuple(tile_patterns) if tile_patterns is not None else _TILE_ID_SUBSTRINGS
+    if not patterns:
+        return []
+    # Slug-collision guard (spec 006 T006-03): the same generic rid (e.g.
+    # `casino_game_component_tile`) is reused for every tile on the page, so
+    # taking the rid's tail as the slug collapses N tiles into 1. When the
+    # tail equals one of the patterns we're matching against, fall back to a
+    # display-name slug instead. Specific rids (slingo_cash_eruption_tile)
+    # are still safe to use directly.
+    generic = {p.lower() for p in patterns}
     out: Dict[str, Dict[str, str]] = {}
     for el in elements:
         rid = (el.get("resource-id") or "").lower()
-        if not any(s in rid for s in _TILE_ID_SUBSTRINGS):
+        if not any(s in rid for s in patterns):
             continue
         text = (el.get("text") or "").strip()
         desc = (el.get("content-desc") or "").strip()
@@ -245,7 +261,10 @@ def extract_game_tiles(
         if not display:
             continue
         slug_raw = rid.split("/")[-1] if "/" in rid else rid
-        slug = slug_raw or _slugify(display)
+        if not slug_raw or slug_raw in generic:
+            slug = _slugify(display)
+        else:
+            slug = slug_raw
         if not slug or slug in out:
             continue
         kind = _infer_kind(f"{display} {rid} {desc}") or fallback_kind

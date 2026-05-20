@@ -206,17 +206,14 @@ def _autorecord_frontier(
             )
 
 
-# ── Spec 005 T046: lobby-walk auto-discovery ───────────────────────────
-
-# Heuristic match: screen_id (when matched against signatures) suggests we
-# are on a lobby/category surface and should harvest game tiles. The list
-# is non-exhaustive on purpose — adding more lobby ids here is a one-line
-# change with no schema impact.
-_LOBBY_SCREEN_IDS = {
-    "home_lobby", "casino_home", "casino_lobby",
-    "lobby_home", "lobby_category", "casino_category",
-    "all_games", "popular_games", "new_games",
-}
+# ── Spec 005 T046 / spec 006: DB-driven lobby-walk auto-discovery ───────
+#
+# Spec 006: the "is this screen a lobby?" and "what rids look like tiles?"
+# answers live in the screen-map DB (logical_screens.role = 'lobby' and
+# lobby_tile_patterns), not in Python literals. Adding a new lobby variant
+# is now a one-row seed. The pre-spec-006 _LOBBY_SCREEN_IDS / _TILE_ID_SUBSTRINGS
+# constants are removed; the defaults still ship — see
+# ScreenMapDB._SPEC_006_LOBBY_SCREEN_IDS / _SPEC_006_TILE_PATTERNS.
 
 
 def _autorecord_lobby_walk(
@@ -225,21 +222,37 @@ def _autorecord_lobby_walk(
 ) -> None:
     """Harvest visible game tiles into game_directory.
 
-    No-op unless the matched screen_id looks like a lobby/category screen
-    — otherwise we'd UPSERT non-tile text and pollute the directory.
+    No-op unless the DB says the matched screen_id is a lobby surface —
+    otherwise we'd UPSERT non-tile text and pollute the directory.
     """
     if _screen_db is None or not screen_id:
         return
-    if screen_id not in _LOBBY_SCREEN_IDS:
+    try:
+        if not _screen_db.is_lobby_screen(screen_id):
+            return
+    except Exception as e:                                  # noqa: BLE001 — FR-027
+        activity.logger.warning(f"is_lobby_screen lookup raised: {e}")
         return
+
     fallback_kind = None
     if "slingo" in screen_id:
         fallback_kind = "slingo"
     elif "slots" in screen_id:
         fallback_kind = "slots"
+
     try:
-        tiles = extract_game_tiles(parsed_elements, fallback_kind=fallback_kind)
-    except Exception as e:                                 # noqa: BLE001
+        tile_patterns = _screen_db.get_lobby_tile_patterns()
+    except Exception as e:                                  # noqa: BLE001 — FR-027
+        activity.logger.warning(f"get_lobby_tile_patterns raised: {e}")
+        tile_patterns = None  # extract_game_tiles falls back to module defaults
+
+    try:
+        tiles = extract_game_tiles(
+            parsed_elements,
+            fallback_kind=fallback_kind,
+            tile_patterns=tile_patterns,
+        )
+    except Exception as e:                                  # noqa: BLE001
         activity.logger.warning(f"lobby-walk extract raised: {e}")
         return
     if not tiles:
@@ -253,7 +266,7 @@ def _autorecord_lobby_walk(
                 build_env=build_env, app_version=app_version,
                 seen_in_lobby=True,
             )
-        except Exception as e:                             # noqa: BLE001 — FR-027
+        except Exception as e:                              # noqa: BLE001 — FR-027
             activity.logger.warning(
                 f"game_directory upsert failed ({t.get('slug','?')}): {e}"
             )

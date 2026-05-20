@@ -180,6 +180,18 @@ def _format_intent_section(
         "the prior intent is done; emit next='done' with active_intent set to "
         "the just-completed intent to mark intent-level completion."
     )
+    lines.append(
+        "**Screen-driven intent selection.** Each turn, also check whether the "
+        "current screen actually belongs to the active intent's domain. If "
+        "page-source / DetectScreen shows a surface that belongs to a "
+        "DIFFERENT intent (e.g. you're mid-`intent_navigate_to_game` but the "
+        "screen is the Fanatics ONE login — email/password/OTP/FanCash-over-"
+        "login), switch your `active_intent` to that intent (e.g. "
+        "`intent_authenticate`) for this turn. The plan-graph guard allows "
+        "re-entry to recovery routes. After the recovery intent emits done, "
+        "switch back and resume. Do NOT mark the original intent failed for "
+        "encountering an unexpected screen — recover, then proceed."
+    )
     return "\n\n".join(lines)
 
 

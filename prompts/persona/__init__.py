@@ -65,8 +65,17 @@ def env_context() -> Dict[str, str]:
 
 
 def soul_and_identity() -> str:
-    """Return the rendered persona (soul + identity) ready to prepend to a goal's prompt."""
+    """Return the rendered persona (soul + identity + app structure) ready to
+    prepend to a goal's prompt. This is the L0 cacheable prefix — written once,
+    read every turn.
+
+    app_structure.md (spec 006) is the agent's mental map of the Fanatics
+    Casino app — bottom-nav, lobby layout, kind→category-pill mapping,
+    universal-modal defaults, deposit-avoidance discipline, and the shared
+    navigation safety rules inherited by both navigate intents.
+    """
     env = env_context()
     soul = render(load("soul.md"), env)
     identity = render(load("identity.md"), env)
-    return soul + "\n\n---\n\n" + identity
+    app_structure = render(load("app_structure.md"), env)
+    return "\n\n---\n\n".join((soul, identity, app_structure))

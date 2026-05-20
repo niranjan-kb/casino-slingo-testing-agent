@@ -53,6 +53,8 @@ class ScreenMapDB:
         conn.executescript(_SCHEMA_SQL)
         self._ensure_build_columns(conn)
         self._ensure_spec_005_columns(conn)
+        self._ensure_spec_006_schema(conn)
+        self._seed_spec_006_defaults(conn)
         conn.commit()
 
     def _ensure_build_columns(self, conn: sqlite3.Connection) -> None:
@@ -115,6 +117,160 @@ class ScreenMapDB:
                    WHERE o2.start_sig = o1.start_sig AND o2.action = o1.action
                )"""
         )
+
+    def _ensure_spec_006_schema(self, conn: sqlite3.Connection) -> None:
+        """Spec 006: data-driven lobby-screen + tile-pattern recognition.
+
+        Adds `role TEXT` to logical_screens (NULL = no special role) and a
+        new lobby_tile_patterns table. Replaces hard-coded _LOBBY_SCREEN_IDS
+        and _TILE_ID_SUBSTRINGS sets so adding a new lobby variant is a
+        one-row seed, not a code change.
+        """
+        cols = {row["name"] for row in conn.execute("PRAGMA table_info(logical_screens)").fetchall()}
+        if "role" not in cols:
+            conn.execute("ALTER TABLE logical_screens ADD COLUMN role TEXT")
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS lobby_tile_patterns (
+                pattern        TEXT NOT NULL,
+                app_context    TEXT NOT NULL DEFAULT 'platform',
+                fallback_kind  TEXT,
+                source         TEXT NOT NULL DEFAULT 'seed',
+                created_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (pattern, app_context)
+            )"""
+        )
+
+    # Default seeds — preserved verbatim from the pre-spec-006 Python literals
+    # plus the four spec-006 additions confirmed from T052 frontier data.
+    _SPEC_006_LOBBY_SCREEN_IDS = (
+        "home", "home_lobby", "casino_home", "casino_lobby",
+        "lobby_home", "lobby_category", "casino_category",
+        "all_games", "popular_games", "new_games",
+    )
+    _SPEC_006_TILE_PATTERNS = (
+        # Legacy generic.
+        "game_tile", "lobby_tile", "casino_tile", "tile_card",
+        # Spec 006 — Fanatics' real tile rids from T052 frontier data.
+        "casino_game_component_tile", "small_game_component",
+        "game_component", "casino_game",
+    )
+
+    # Operator-walkthrough anchors (spec 006). Each tuple is (logical_id,
+    # canonical_name, role). Roles correspond to behaviour gates:
+    #   destructive — path planning with exclude_destructive=true skips these
+    #   capability  — available capability; only entered when the SessionIntent
+    #                 explicitly asks for it (e.g. debug_menu for geo override)
+    #   account     — legitimate nav target, read-only for the agent
+    #   daily_bonus — reserved bottom-nav slot (FanCash Spins)
+    _SPEC_006_ANCHOR_SCREENS = (
+        ("debug_menu",          "Debug Menu",            "capability"),
+        ("quick_deposit_sheet", "Quick Deposit",         "destructive"),
+        ("profile",             "Profile / Account",     "account"),
+        ("fancash_spins_daily", "FanCash Spins (Daily)", "daily_bonus"),
+    )
+
+    def _seed_spec_006_defaults(self, conn: sqlite3.Connection) -> None:
+        """Idempotent default-row seeding. INSERT OR IGNORE means re-running on
+        an upgraded DB never resurrects rows an operator deliberately deleted."""
+        for screen_id in self._SPEC_006_LOBBY_SCREEN_IDS:
+            conn.execute(
+                """INSERT OR IGNORE INTO logical_screens (logical_id, canonical_name, role)
+                   VALUES (?, ?, 'lobby')""",
+                (screen_id, screen_id.replace("_", " ").title()),
+            )
+        for logical_id, canonical_name, role in self._SPEC_006_ANCHOR_SCREENS:
+            conn.execute(
+                """INSERT OR IGNORE INTO logical_screens (logical_id, canonical_name, role)
+                   VALUES (?, ?, ?)""",
+                (logical_id, canonical_name, role),
+            )
+        for pattern in self._SPEC_006_TILE_PATTERNS:
+            conn.execute(
+                """INSERT OR IGNORE INTO lobby_tile_patterns (pattern, app_context, source)
+                   VALUES (?, 'platform', 'seed')""",
+                (pattern,),
+            )
+
+    # ── Spec 006: logical-screen role + tile-pattern API ────────────────
+
+    def is_lobby_screen(self, screen_id: Optional[str]) -> bool:
+        """Return True iff `logical_screens.role` == 'lobby' for this id.
+
+        Used by the observer activity to decide whether to harvest tiles
+        from the current page-source. None / empty / unknown ⇒ False.
+        """
+        return self.get_logical_screen_role(screen_id) == "lobby"
+
+    def get_logical_screen_role(self, screen_id: Optional[str]) -> Optional[str]:
+        """Return the `role` of a logical screen, or None if unseeded.
+
+        Roles in use (spec 006):
+          'lobby'       — game-tile-bearing surfaces (auto-discovery fires here)
+          'destructive' — never enter / never confirm (debug menu, quick deposit)
+          'account'     — read-only legitimate nav target (profile)
+          'daily_bonus' — reserved bottom-nav slot (FanCash Spins)
+        """
+        if not screen_id:
+            return None
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT role FROM logical_screens WHERE logical_id = ?",
+            (screen_id,),
+        ).fetchone()
+        return row["role"] if row else None
+
+    def get_lobby_tile_patterns(self, app_context: str = "platform") -> List[str]:
+        """Return the resource-id substrings used to recognize game tiles in
+        the lobby. Fed into observers.screen_identity.extract_game_tiles."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT pattern FROM lobby_tile_patterns WHERE app_context = ? ORDER BY pattern",
+            (app_context,),
+        ).fetchall()
+        return [r["pattern"] for r in rows]
+
+    def upsert_logical_screen_role(
+        self,
+        logical_id: str,
+        *,
+        role: Optional[str],
+        canonical_name: Optional[str] = None,
+        description: Optional[str] = None,
+    ) -> None:
+        """Set or clear the role on a logical_screens row. role=None clears it
+        (so removing 'lobby' from a screen is a single call). Creates the row
+        if it doesn't exist (canonical_name falls back to the logical_id)."""
+        conn = self._get_conn()
+        conn.execute(
+            """INSERT INTO logical_screens (logical_id, canonical_name, description, role)
+               VALUES (?, COALESCE(?, ?), ?, ?)
+               ON CONFLICT(logical_id) DO UPDATE SET
+                   canonical_name = COALESCE(excluded.canonical_name, canonical_name),
+                   description    = COALESCE(excluded.description, description),
+                   role           = excluded.role""",
+            (logical_id, canonical_name, logical_id, description, role),
+        )
+        conn.commit()
+
+    def upsert_lobby_tile_pattern(
+        self,
+        pattern: str,
+        *,
+        fallback_kind: Optional[str] = None,
+        source: str = "seed",
+        app_context: str = "platform",
+    ) -> None:
+        """Add or refresh a tile-rid substring. Idempotent on (pattern, app_context)."""
+        conn = self._get_conn()
+        conn.execute(
+            """INSERT INTO lobby_tile_patterns (pattern, app_context, fallback_kind, source)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT(pattern, app_context) DO UPDATE SET
+                   fallback_kind = COALESCE(excluded.fallback_kind, fallback_kind),
+                   source        = excluded.source""",
+            (pattern, app_context, fallback_kind, source),
+        )
+        conn.commit()
 
     # ── Device Profiles ──────────────────────────────────────────────
 

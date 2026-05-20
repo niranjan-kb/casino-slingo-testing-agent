@@ -246,11 +246,36 @@ async def is_intent_reachable(payload: Dict[str, Any]) -> Dict[str, Any]:
         requires = defn.get("requires")
         if not requires:
             return {"reachable": True, "target_node": name, "reason": "no_precondition"}
+        # Special predicate: `requires: any_terminal` (used by `report` node).
+        # Means "reachable as soon as any plan node has been completed OR a
+        # terminal condition (panic, budget exhaustion) has fired". We treat
+        # `len(completed) > 0` as a sufficient proxy — there's always SOMETHING
+        # to report once the workflow has done any work.
+        if requires == "any_terminal":
+            if completed:
+                return {"reachable": True, "target_node": name, "reason": "any_terminal_satisfied"}
+            return {"reachable": False, "target_node": None, "reason": "any_terminal_no_completions"}
+        # Recovery routes declared in the YAML's top-level `recovery` section
+        # let the planner re-enter a node from any state (e.g. re-auth on
+        # session-lost mid-navigation). The node is reachable iff:
+        #   - it's listed as a recovery intent, AND
+        #   - its own linear `requires` chain is satisfied (so re-entry only
+        #     applies after the first natural completion).
+        recovery_routes = graph.get("recovery") or {}
+        is_recovery_intent = any(
+            isinstance(route, dict) and route.get("intent") == active_intent
+            for route in recovery_routes.values()
+        )
         # `requires: 'authenticate.success'` → the predecessor node name is
         # everything before the dot.
         pred = requires.split(".", 1)[0]
         if pred in completed:
-            return {"reachable": True, "target_node": name, "reason": f"precondition_met:{pred}"}
+            reason = (
+                f"precondition_met:{pred}|recovery_reentry"
+                if is_recovery_intent and name in completed
+                else f"precondition_met:{pred}"
+            )
+            return {"reachable": True, "target_node": name, "reason": reason}
 
     return {
         "reachable": False,
