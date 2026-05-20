@@ -5,7 +5,6 @@ intents:
   - intent_navigate_to_screen
   - intent_navigate_to_game
   - intent_play_game
-  - intent_play_bonus
 risk_tier: low
 side_effects: [db_write]
 description: |

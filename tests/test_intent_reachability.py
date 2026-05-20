@@ -32,8 +32,7 @@ _CASINO_GRAPH: Dict[str, Any] = {
         "parse_session":    {"intent": "intent_parse_session"},
         "authenticate":     {"intent": "intent_authenticate",     "requires": "parse_session.success"},
         "navigate_to_game": {"intent": "intent_navigate_to_game", "requires": "authenticate.success"},
-        "load_context":    {"intent": "intent_load_game_context","requires": "navigate_to_game.success"},
-        "play_game":        {"intent": "intent_play_game",         "requires": "load_context.success"},
+        "play_game":        {"intent": "intent_play_game",         "requires": "navigate_to_game.success"},
         "report":           {"intent": "intent_report",            "requires": "any_terminal"},
     },
     "recovery": {
@@ -76,7 +75,7 @@ class TestAnyTerminalPredicate:
         ["parse_session"],
         ["parse_session", "authenticate"],
         ["parse_session", "authenticate", "navigate_to_game"],
-        ["parse_session", "authenticate", "navigate_to_game", "load_context", "play_game"],
+        ["parse_session", "authenticate", "navigate_to_game", "play_game"],
     ])
     def test_reachable_as_soon_as_any_node_completes(self, completed: List[str]) -> None:
         """`report` is reachable from ANY non-empty completion state."""
@@ -121,7 +120,7 @@ class TestRecoveryReentry:
         not mention recovery_reentry even if re-emitted."""
         result = _call(
             "intent_play_game",
-            completed=["parse_session", "authenticate", "navigate_to_game", "load_context", "play_game"],
+            completed=["parse_session", "authenticate", "navigate_to_game", "play_game"],
         )
         assert result["reachable"] is True
         assert "recovery_reentry" not in result["reason"]
@@ -137,8 +136,8 @@ class TestLinearFlowStillWorks:
         ("intent_parse_session",     [],                           True),   # entry path
         ("intent_authenticate",      ["parse_session"],            True),
         ("intent_navigate_to_game",  ["parse_session", "authenticate"], True),
-        ("intent_play_game",         ["parse_session", "authenticate"], False),  # missing load_context
-        ("intent_load_game_context", ["parse_session", "authenticate", "navigate_to_game"], True),
+        ("intent_play_game",         ["parse_session", "authenticate"], False),  # missing navigate_to_game
+        ("intent_play_game",         ["parse_session", "authenticate", "navigate_to_game"], True),
     ])
     def test_linear_progression(
         self, intent: str, completed: List[str], expected_reachable: bool,

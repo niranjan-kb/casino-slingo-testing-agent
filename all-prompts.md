@@ -1,25 +1,23 @@
 Here's the complete prompt-layer inventory, organized by where each file plugs into the planner prompt assembly (generate_genai_prompt in prompts/generators.py).
 
-Also: @app_structure.md
-
 L0 — Persona / Identity (cacheable prefix)
 Path	Role
 prompts/persona/soul.md	Danny Ocean's identity, values, vibe — the who
 prompts/persona/identity.md	Operational identity — what kind of agent (QA, casino, safety rules)
+prompts/persona/app_structure.md	Per-screen mental model of the app (Home, Cat Nav, sushi menu, modals). Filled iteratively from operator walkthroughs.
 prompts/persona/persona_dials.yaml	Numeric persona knobs (risk tolerance, verbosity, etc.) — read by observers
-prompts/persona/init.py	Loader
+prompts/persona/__init__.py	Loader. `soul_and_identity()` composes soul + identity + app_structure into the L0 block.
 L1 — Tool definitions (per-call, intent-filtered)
 Path	Role
 tools/registry/*.yaml (14 files)	Per-tool side-cars — platforms, intents, risk_tier, side_effects. Used by _format_tools for the intent-filter
 Tool descriptions baked into tools/tool_registry.py ToolDefinition entries	Human-readable tool args + descriptions shown in the prompt
-L2 — Intent declarations
+L2 — Intent declarations (6 — the closed set)
 Path	Role
-intents/intent_parse_session.md	Compile vague prompt → SessionIntent
+intents/intent_parse_session.md	Compile vague prompt → SessionIntent (one-shot at session start)
 intents/intent_authenticate.md	Fanatics ONE 2-step + OTP + home confirm
-intents/intent_navigate_to_screen.md	Generic from-any-screen → target signature
-intents/intent_navigate_to_game.md	Lobby walk (recents → category → search → scroll)
-intents/intent_load_game_context.md	Inject playbook + kind-file as L4
-intents/intent_play_game.md	Generic round-loop driver
+intents/intent_navigate_to_screen.md	Generic from-any-screen → target signature (settings/account/support)
+intents/intent_navigate_to_game.md	Lobby walk (recents → category → search → scroll); workflow auto-seeds game_directory + game_playbook on success
+intents/intent_play_game.md	Generic round-loop driver; bonus rounds handled by inline frozen-wager branch
 intents/intent_report.md	Session terminator — emits run report
 L3 — Runtime facts (JSON, not markdown)
 Path	Role
@@ -40,15 +38,15 @@ Not a static file — built per turn by _format_history in prompts/generators.py
 
 Glue / orchestration
 Path	Role
-prompts/generators.py	The generate_genai_prompt() assembler — combines L0..L5
-prompts/init.py	Package init
+prompts/generators.py	The generate_genai_prompt() assembler — combines L0..L5; consumes game_context for L4
+prompts/__init__.py	Package init
 prompts/README.md	Layer reference doc
-goals/casino_session/init.py	Goal config — tool list, MCP server, starter prompt baked into API image at build
+goals/casino_session/__init__.py	Goal config — tool list, MCP server, starter prompt baked into API image at build
 goals/casino_session/prompt_loader.py	Loads goal's starter prompt from disk
 goals/slingo_qa_android/	Legacy bundled goal — slated for removal once intents fully validated
-Reference / inputs (not auto-loaded, used to build prompts above)
+Reference / inputs (consumed by app_structure.md walkthroughs, not auto-loaded into prompts)
 Path	Role
-fancash_spins.md	Rich knowledge doc about Spin-to-Win feature — input for future app_structure.md
+fancash_spins.md	Rich knowledge doc about the FanCash Spins / "spin to win" daily-bonus feature — referenced by app_structure.md's Daily Spin section
 games.md	~100 top games + state availability — input for game_directory seeding decisions
 agent-harness.md	Runtime topology — for humans, not prompts
 CLAUDE.md	Engineering guide — for AI editors, not prompts

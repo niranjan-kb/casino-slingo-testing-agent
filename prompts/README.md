@@ -7,9 +7,11 @@ Everything related to building LLM prompts for the Casino QA agent — both the 
 ```
 prompts/
 ├── persona/          -- shared identity content used by every goal
-│   ├── soul.md
-│   ├── identity.md
-│   └── persona_dials.yaml
+│   ├── soul.md           -- who Danny Ocean is (values, vibe)
+│   ├── identity.md       -- operational identity (QA, casino, safety rules)
+│   ├── app_structure.md  -- per-screen mental model of the app, filled
+│   │                        iteratively from operator walkthroughs
+│   └── persona_dials.yaml-- numeric knobs (risk tolerance, verbosity)
 └── generators.py     -- runtime LLM prompt assembler
 ```
 
@@ -31,5 +33,5 @@ The two layers don't import each other. The persona is *content*; the generators
 
 ## Modules
 
-- **`prompts.persona`** — `load`, `render`, `env_context`, `soul_and_identity`. Consumed by `goals/<g>/prompt_loader.py` at goal build-time.
-- **`prompts.generators`** — `generate_genai_prompt()` builds the full system prompt from an `AgentGoal` + conversation history. Also `generate_tool_completion_prompt()` and `generate_missing_args_prompt()` for mid-conversation tool flow. Consumed by `workflows/`.
+- **`prompts.persona`** — `load`, `render`, `env_context`, `soul_and_identity`. `soul_and_identity()` composes three files into the L0 block: `soul.md` + `identity.md` + `app_structure.md` (cacheable prefix). Consumed by `goals/<g>/prompt_loader.py` at goal build-time.
+- **`prompts.generators`** — `generate_genai_prompt()` builds the full system prompt from an `AgentGoal` + conversation history; accepts an optional `game_context={playbook, kind_name}` envelope which becomes the L4 game-knowledge layer (workflow threads it in after `intent_navigate_to_game` completes). Also `generate_tool_completion_prompt()` and `generate_missing_args_prompt()` for mid-conversation tool flow. Consumed by `workflows/`.

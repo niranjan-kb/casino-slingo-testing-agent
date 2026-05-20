@@ -1,6 +1,6 @@
 name: BudgetCheck
 platforms: [android, ios, web]
-intents: [intent_play_game, intent_play_bonus]
+intents: [intent_play_game]
 risk_tier: high
 side_effects: []
 description: |

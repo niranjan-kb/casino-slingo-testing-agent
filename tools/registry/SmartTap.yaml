@@ -8,9 +8,7 @@ intents:
   - intent_authenticate
   - intent_navigate_to_screen
   - intent_navigate_to_game
-  - intent_load_game_context
   - intent_play_game
-  - intent_play_bonus
 risk_tier: medium
 side_effects: [screen_transition, db_write]
 description: |

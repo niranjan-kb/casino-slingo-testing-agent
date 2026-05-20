@@ -1152,6 +1152,86 @@ class ScreenMapDB:
         )
         conn.commit()
 
+    def upsert_game_playbook(
+        self,
+        slug: str,
+        *,
+        actions_json: Optional[str] = None,
+        round_end_signature: Optional[str] = None,
+        balance_signature: Optional[str] = None,
+        balance_regex: Optional[str] = None,
+        bonus_trigger_signatures: Optional[str] = None,
+        auto_dismiss_signatures: Optional[str] = None,
+        recovery_json: Optional[str] = None,
+        build_env: str = "unknown",
+        app_version: str = "unknown",
+    ) -> Dict[str, bool]:
+        """Idempotent upsert keyed by slug (spec 006 T202).
+
+        First call inserts an empty row keyed on `slug` (the L4 game-knowledge
+        layer is then queryable for the row). Subsequent calls COALESCE-update
+        any field the caller supplies; unset fields preserve their existing
+        values. Returns {"created": bool, "written": True}.
+        """
+        conn = self._get_conn()
+        now = datetime.utcnow().isoformat()
+        existed = conn.execute(
+            "SELECT 1 FROM game_playbook WHERE slug = ?", (slug,)
+        ).fetchone()
+        conn.execute(
+            """INSERT INTO game_playbook
+                   (slug, actions_json, round_end_signature, balance_signature,
+                    balance_regex, bonus_trigger_signatures, auto_dismiss_signatures,
+                    recovery_json, build_env, app_version, updated_at)
+               VALUES (?, COALESCE(?, '{}'), ?, ?, ?,
+                       COALESCE(?, '[]'), COALESCE(?, '[]'), COALESCE(?, '{}'),
+                       ?, ?, ?)
+               ON CONFLICT(slug) DO UPDATE SET
+                   actions_json             = COALESCE(?, actions_json),
+                   round_end_signature      = COALESCE(?, round_end_signature),
+                   balance_signature        = COALESCE(?, balance_signature),
+                   balance_regex            = COALESCE(?, balance_regex),
+                   bonus_trigger_signatures = COALESCE(?, bonus_trigger_signatures),
+                   auto_dismiss_signatures  = COALESCE(?, auto_dismiss_signatures),
+                   recovery_json            = COALESCE(?, recovery_json),
+                   build_env                = excluded.build_env,
+                   app_version              = excluded.app_version,
+                   updated_at               = excluded.updated_at""",
+            (
+                slug, actions_json, round_end_signature, balance_signature,
+                balance_regex, bonus_trigger_signatures, auto_dismiss_signatures,
+                recovery_json, build_env, app_version, now,
+                actions_json, round_end_signature, balance_signature,
+                balance_regex, bonus_trigger_signatures, auto_dismiss_signatures,
+                recovery_json,
+            ),
+        )
+        conn.commit()
+        return {"created": existed is None, "written": True}
+
+    def get_game_context(self, slug: str) -> Optional[Dict[str, Any]]:
+        """Read the L4 game-knowledge envelope for `slug` (spec 006 T204).
+
+        Returns {playbook: dict, kind_name: str|null} for prompts.generate_genai_prompt
+        consumption, or None if no playbook row exists for the slug. The
+        kind_name is fetched from `game_directory` so the prompt assembler can
+        load the matching `game_kinds/<kind>.md` body.
+        """
+        conn = self._get_conn()
+        pb_row = conn.execute(
+            "SELECT * FROM game_playbook WHERE slug = ?", (slug,)
+        ).fetchone()
+        if pb_row is None:
+            return None
+        dir_row = conn.execute(
+            "SELECT kind FROM game_directory WHERE slug = ?", (slug,)
+        ).fetchone()
+        playbook = {k: pb_row[k] for k in pb_row.keys()}
+        return {
+            "playbook": playbook,
+            "kind_name": (dir_row["kind"] if dir_row else None),
+        }
+
     def get_rounds_for_workflow(self, workflow_id: str) -> List[Dict[str, Any]]:
         """All game_rounds rows logged under one workflow_id (for run-report)."""
         conn = self._get_conn()

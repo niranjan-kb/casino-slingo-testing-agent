@@ -72,10 +72,11 @@ goal_casino_session = AgentGoal(
         "Run a casino-app session end-to-end. Per-turn objective is driven by "
         "the intent registry, sequenced by graphs/casino_session.yaml: "
         "intent_parse_session → intent_authenticate → intent_navigate_to_game → "
-        "intent_load_game_context → intent_play_game (with optional "
-        "intent_play_bonus branch) → intent_report. intent_navigate_to_screen "
-        "is also available for off-graph navigation. Platform-agnostic; learned "
-        "coordinates are persisted per platform/build in the screen-map DB."
+        "intent_play_game → intent_report. intent_navigate_to_screen is also "
+        "available for off-graph navigation. Bonus rounds are handled inline "
+        "within intent_play_game (frozen-wager branch — no separate intent). "
+        "Platform-agnostic; learned coordinates are persisted per platform/"
+        "build in the screen-map DB."
     ),
     tools=list(_CASINO_SESSION_LOCAL_TOOLS),
     mcp_server_definition=get_appium_mcp_server_definition(

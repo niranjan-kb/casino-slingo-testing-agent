@@ -413,8 +413,9 @@ def _format_runtime_facts(runtime_facts: Dict[str, Any]) -> str:
 def _format_game_knowledge(game_context: Dict[str, Any]) -> str:
     """L4 layer: per-game playbook + per-kind file. Spec 005 T026.
 
-    Triggered by intent_load_game_context when a `game_directory.loaded_signature`
-    matches the current screen. Combined size targets ≤ 600 tokens (FR-010).
+    Triggered by the workflow's post-navigate auto-seed (spec 006 T203/T204)
+    once intent_navigate_to_game lands on a `game_directory.loaded_signature`.
+    Combined size targets ≤ 600 tokens (FR-010).
 
     `game_context` shape:
         {

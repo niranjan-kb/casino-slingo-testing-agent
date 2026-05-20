@@ -20,7 +20,12 @@ from workflows.workflow_helpers import (
 )
 
 with workflow.unsafe.imports_passed_through():
-    from activities.intent_activity import is_intent_reachable
+    from activities.intent_activity import (
+        is_intent_reachable,
+        load_game_context_activity,
+        upsert_game_directory_activity,
+        upsert_game_playbook_activity,
+    )
     from activities.observer_activity import run_observers
     from activities.tool_activities import ToolActivities, mcp_list_tools
     from goals import goal_list
@@ -146,6 +151,26 @@ class AgentGoalWorkflow:
         self.session_intent: Optional[Dict[str, Any]] = None
         self.completed_nodes: List[str] = []
 
+        # Spec 006 T203/T204 state — post-navigate auto-seed + L4 game-knowledge.
+        # `game_context` is the {playbook, kind_name} envelope injected into
+        # the L4 prompt layer once intent_navigate_to_game completes. It
+        # replaces the work the deleted `intent_load_game_context` did. The
+        # `last_resolved_*` fields cache ResolveDirectory + DetectScreen
+        # outputs so the auto-seed call has the slug/kind/loaded_signature
+        # without re-querying the planner.
+        self.game_context: Optional[Dict[str, Any]] = None
+        self.last_resolved_slug: Optional[str] = None
+        self.last_resolved_kind: Optional[str] = None
+        self.last_loaded_signature: Optional[str] = None
+
+        # Spec 006 T205 state — ReadBalance retry budget enforcement. Counts
+        # consecutive ReadBalance results where `found` is False; reset on a
+        # successful read. When it hits 3, the workflow appends a strong
+        # directive prompt that nudges the LLM to invoke BudgetCheck with
+        # this counter so the `balance_unparseable` terminal fires there.
+        self.balance_consecutive_failures: int = 0
+        self._balance_terminal_directive_emitted: bool = False
+
     # see ../api/main.py#temporal_client.start_workflow() for how the input parameters are set
     @workflow.run
     async def run(self, combined_input: CombinedInput) -> str:
@@ -239,6 +264,7 @@ class AgentGoalWorkflow:
                     active_intent_body=active_intent_body,
                     completed_intents=self.completed_intents,
                     session_prompt=self.session_prompt,
+                    game_context=self.game_context,
                 )
 
                 # Build the per-call enum of valid tool names so the model
@@ -326,6 +352,16 @@ class AgentGoalWorkflow:
                     and self.active_intent
                 ):
                     self._mark_plan_node_completed(self.active_intent)
+
+                # Spec 006 T203 — once intent_navigate_to_game says done, fire
+                # the auto-seed (game_directory + game_playbook) + load the L4
+                # game-knowledge envelope into self.game_context. Replaces
+                # the work the deleted `intent_load_game_context` did.
+                if (
+                    tool_data.get("next") == "done"
+                    and self.active_intent == "intent_navigate_to_game"
+                ):
+                    await self._auto_seed_game_context()
 
                 workflow.logger.info(
                     f"next_step: {next_step}, current tool is {current_tool}"
@@ -704,6 +740,169 @@ class AgentGoalWorkflow:
             return True
         return bool(result.get("reachable", True))
 
+    # ── Spec 006 T203/T204/T205: post-tool capture + auto-seed + retry budget ─
+
+    def _capture_tool_result(self, current_tool: Optional[str]) -> None:
+        """Snapshot fields from the latest tool result into workflow state.
+
+        Replay-safe — tool_results is itself recorded in workflow history. We
+        only mirror values the workflow needs out-of-band: the resolved game
+        slug/kind/loaded_signature (for the post-navigate auto-seed), the
+        SessionIntent envelope (for downstream activities), and the
+        consecutive-failure count on ReadBalance (for the retry-budget
+        terminal directive in T205). Unknown tools are no-ops.
+        """
+        if not current_tool or not self.tool_results:
+            return
+        last: Dict[str, Any] = (
+            self.tool_results[-1] if isinstance(self.tool_results[-1], dict) else {}
+        )
+
+        if current_tool == "ParseSessionIntent":
+            # ParseSessionIntent emits the full SessionIntent envelope.
+            if last.get("flow") and last.get("budget") and last.get("terminal"):
+                self.session_intent = {k: v for k, v in last.items() if k != "tool"}
+
+        elif current_tool == "ResolveDirectory" and last.get("resolved"):
+            self.last_resolved_slug = last.get("slug") or self.last_resolved_slug
+            self.last_resolved_kind = last.get("kind") or self.last_resolved_kind
+            self.last_loaded_signature = (
+                last.get("loaded_signature") or self.last_loaded_signature
+            )
+
+        elif current_tool == "DetectScreen":
+            # DetectScreen returns {screen, confidence, ...}. We record the
+            # screen name as a candidate loaded_signature; ResolveDirectory's
+            # value (when available) wins because it matches the catalog.
+            screen = last.get("screen") or last.get("screen_id")
+            if screen and not self.last_loaded_signature:
+                self.last_loaded_signature = screen
+
+        elif current_tool == "ReadBalance":
+            # T205 — enforce the retry budget. The tool itself never raises;
+            # `found: False` is the failure signal. Reset on a hit.
+            if last.get("found"):
+                if self.balance_consecutive_failures != 0:
+                    workflow.logger.info(
+                        f"ReadBalance succeeded; resetting "
+                        f"balance_consecutive_failures from "
+                        f"{self.balance_consecutive_failures} to 0"
+                    )
+                self.balance_consecutive_failures = 0
+                self._balance_terminal_directive_emitted = False
+            else:
+                self.balance_consecutive_failures += 1
+                workflow.logger.warning(
+                    f"ReadBalance miss "
+                    f"(reason={last.get('reason')}, retries={self.balance_consecutive_failures})"
+                )
+                if (
+                    self.balance_consecutive_failures >= 3
+                    and not self._balance_terminal_directive_emitted
+                ):
+                    self._balance_terminal_directive_emitted = True
+                    self.prompt_queue.append(
+                        "### ReadBalance has returned not-found "
+                        f"{self.balance_consecutive_failures} times in a row. "
+                        "Call BudgetCheck NOW with "
+                        f"balance_consecutive_failures={self.balance_consecutive_failures} "
+                        "to fire the `balance_unparseable` terminal. Then transition "
+                        "active_intent to intent_report and emit `next='done'`."
+                    )
+
+    async def _auto_seed_game_context(self) -> None:
+        """Fire T201/T202/T204 after intent_navigate_to_game completes.
+
+        Best-effort by design (Constitution III — observers/auto-seed never
+        halt the goal loop). Without a resolved slug we skip silently; the
+        play loop falls back to LLM-only reasoning (no L4 layer).
+        """
+        slug = self.last_resolved_slug or self._slug_from_session_intent()
+        if not slug:
+            workflow.logger.info(
+                "auto-seed skipped: no resolved slug from ResolveDirectory or "
+                "session_intent.target"
+            )
+            return
+        kind = self.last_resolved_kind or self._kind_from_session_intent()
+        loaded_signature = self.last_loaded_signature
+        workflow.logger.info(
+            f"auto-seed firing: slug={slug}, kind={kind}, "
+            f"loaded_signature={loaded_signature}"
+        )
+
+        # T201 — refresh directory row (idempotent; lobby walk may already
+        # have populated everything except loaded_signature).
+        await workflow.execute_activity(
+            upsert_game_directory_activity,
+            {
+                "slug": slug,
+                "kind": kind,
+                "loaded_signature": loaded_signature,
+                "seen_in_lobby": False,
+            },
+            start_to_close_timeout=timedelta(seconds=10),
+            retry_policy=RetryPolicy(
+                initial_interval=timedelta(seconds=1),
+                maximum_attempts=2,
+                backoff_coefficient=1.0,
+            ),
+        )
+
+        # T202 — INSERT-OR-PRESERVE empty playbook row. Subsequent calls from
+        # intent_play_game's first-launch bootstrap fill the signature fields.
+        await workflow.execute_activity(
+            upsert_game_playbook_activity,
+            {"slug": slug},
+            start_to_close_timeout=timedelta(seconds=10),
+            retry_policy=RetryPolicy(
+                initial_interval=timedelta(seconds=1),
+                maximum_attempts=2,
+                backoff_coefficient=1.0,
+            ),
+        )
+
+        # T204 — load the L4 envelope into workflow state. The next planner
+        # turn picks it up via generate_genai_prompt(game_context=...).
+        ctx_result = await workflow.execute_activity(
+            load_game_context_activity,
+            {"slug": slug},
+            start_to_close_timeout=timedelta(seconds=10),
+            retry_policy=RetryPolicy(
+                initial_interval=timedelta(seconds=1),
+                maximum_attempts=2,
+                backoff_coefficient=1.0,
+            ),
+        )
+        ctx = ctx_result.get("game_context") if isinstance(ctx_result, dict) else None
+        if ctx:
+            self.game_context = ctx
+            workflow.logger.info(
+                f"auto-seed loaded L4 game_context: "
+                f"slug={slug}, kind_name={ctx.get('kind_name')}"
+            )
+        else:
+            workflow.logger.warning(
+                f"auto-seed: load_game_context returned no row for slug={slug} "
+                f"(reason={ctx_result.get('reason') if isinstance(ctx_result, dict) else 'unknown'})"
+            )
+
+    def _slug_from_session_intent(self) -> Optional[str]:
+        if not self.session_intent:
+            return None
+        target = self.session_intent.get("target") or {}
+        slug = target.get("slug")
+        return slug if isinstance(slug, str) and slug.strip() else None
+
+    def _kind_from_session_intent(self) -> Optional[str]:
+        if not self.session_intent:
+            return None
+        target = self.session_intent.get("target") or {}
+        kind = target.get("kind")
+        if isinstance(kind, str) and kind.strip() and kind != "any":
+            return kind
+        return None
+
     def _mark_plan_node_completed(self, intent_id: str) -> None:
         """Map an intent id back to its plan-graph node name and record completion.
 
@@ -779,6 +978,12 @@ class AgentGoalWorkflow:
             self.goal,
             self.multi_goal_mode,
         )
+
+        # Spec 006 — capture downstream-relevant tool outputs from the latest
+        # result. Cheap O(1) inspection of tool_results[-1]; lets us auto-seed
+        # game_context after navigate (T203/T204) and enforce the ReadBalance
+        # retry budget (T205) without re-querying the planner.
+        self._capture_tool_result(current_tool)
 
         # set new goal if we should
         if len(self.tool_results) > 0:

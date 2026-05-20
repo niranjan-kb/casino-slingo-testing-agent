@@ -24,10 +24,13 @@ from activities.intent_activity import (  # noqa: E402
     get_play_loop,
     is_intent_reachable,
     list_intent_registry_summary,
+    load_game_context_activity,
     load_runtime_facts_activity,
     record_intent_transition,
     set_plan_graph,
     set_screen_db as set_intent_screen_db,
+    upsert_game_directory_activity,
+    upsert_game_playbook_activity,
 )
 from activities.observer_activity import (  # noqa: E402
     run_observers,
@@ -178,6 +181,11 @@ async def main():
                     is_intent_reachable,
                     load_runtime_facts_activity,
                     record_intent_transition,
+                    # Spec 006 T201/T202/T204: post-navigate auto-seed +
+                    # L4 game-knowledge envelope loader.
+                    upsert_game_directory_activity,
+                    upsert_game_playbook_activity,
+                    load_game_context_activity,
                 ],
                 activity_executor=activity_executor,
             )

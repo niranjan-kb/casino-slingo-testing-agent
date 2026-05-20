@@ -33,7 +33,7 @@ Walk the lobby to the target's `loaded_signature`. Auth has already happened.
    - **Sub-strategy 3 — search.** (a) Tap search input (rid selector, not text-contains xpath). (b) Pre-typing shows trending/suggestion pills (`casino1`, `casino2`, recents) — NORMAL, NOT failure. Do NOT bail. (c) Re-find EditText after focus, type `SessionIntent.target.query` LITERALLY. (d) Tap first result.
    - **Sub-strategy 4 — scroll grid.** `appium_swipe` (or `appium_scroll`) the main grid up to N pages, tap the tile when its display text appears.
 3. **Verify** after every tap with `DetectScreen` against `loaded_signature` (8s budget). Mismatch → next sub-strategy.
-4. **On match**, emit `next='done'` with `active_intent=intent_navigate_to_game`. `intent_load_game_context` takes over.
+4. **On match**, emit `next='done'` with `active_intent=intent_navigate_to_game`. The workflow auto-seeds `game_directory` + `game_playbook` from the resolved slug and loads the L4 game-knowledge envelope before the next planner turn; `intent_play_game` is next.
 
 ## Failure handling
 

@@ -56,6 +56,50 @@ def test_every_registered_intent_is_in_schema_enum(
     )
 
 
+# ── Spec 006 T106: closed-set guard at exactly 6 intents ──────────────────
+
+
+_CANONICAL_SIX = {
+    "intent_parse_session",
+    "intent_authenticate",
+    "intent_navigate_to_screen",
+    "intent_navigate_to_game",
+    "intent_play_game",
+    "intent_report",
+}
+
+
+def test_registry_has_exactly_six_canonical_intents(
+    registered_intent_ids: List[str],
+) -> None:
+    """Spec 006 US-03 AC: the closed-set is exactly these 6 intents.
+
+    Adding a new intent file in `intents/` requires updating this canonical set
+    deliberately (the change is small but the planner-prompt budget is tight, so
+    we want a visible test-edit on growth).
+    """
+    actual = set(registered_intent_ids)
+    extras = actual - _CANONICAL_SIX
+    missing = _CANONICAL_SIX - actual
+    assert not extras and not missing, (
+        f"Registry diverged from the canonical 6. "
+        f"extras={sorted(extras)}, missing={sorted(missing)}"
+    )
+
+
+def test_schema_enum_has_exactly_six_entries(
+    schema_intent_enum: List[str],
+) -> None:
+    """The schema enum must match the canonical 6 (planner cannot emit anything else)."""
+    actual = set(schema_intent_enum)
+    extras = actual - _CANONICAL_SIX
+    missing = _CANONICAL_SIX - actual
+    assert not extras and not missing, (
+        f"plan_next_action.schema.json active_intent enum diverged from the canonical 6. "
+        f"extras={sorted(extras)}, missing={sorted(missing)}"
+    )
+
+
 def test_schema_enum_only_contains_known_shape(
     schema_intent_enum: List[str],
 ) -> None:

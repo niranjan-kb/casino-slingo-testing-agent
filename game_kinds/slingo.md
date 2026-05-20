@@ -48,5 +48,7 @@ stake near full-house) blows `MAX_LOSS_USD`. Override per-game via playbook
 `recovery_json.allow_buy_spins`.
 
 ## Bonus exploration
-`slingo_bonus_screen` → `intent_play_bonus` with `frozen_wager=true`. Capped
-actions. Novel screens → `signature_proposals`.
+On `slingo_bonus_screen`, `intent_play_game` enters its frozen-wager branch:
+no new bets, no stake changes, advance via prominent Continue/Next/Pick text
+candidates. Returns to base play when `slingo_base_grid` is observed. Capped
+at 30 actions; novel screens → `signature_proposals`.

@@ -310,6 +310,129 @@ def _is_on_entry_path(
 
 
 @activity.defn
+async def upsert_game_directory_activity(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Spec 006 T201 — idempotent game_directory upsert from post-navigate signals.
+
+    Called by the workflow once `intent_navigate_to_game` is marked complete
+    (replaces the work that the deleted `intent_load_game_context` was meant
+    to do). Inputs are extracted from the most-recent ResolveDirectory /
+    DetectScreen tool results plus the active RuntimeFacts.
+
+    Payload:
+        slug:              str    (required)
+        display_name:      str?   (defaults to slug-titlecased)
+        kind:              str?   (defaults to 'unknown' — preserved by COALESCE
+                                   if a real row already exists from lobby walk)
+        loaded_signature:  str?
+        build_env:         str?
+        app_version:       str?
+        seen_in_lobby:     bool?  (default False — direct navigation, not lobby walk)
+
+    Returns {written: bool, slug, reason?}.
+    """
+    db = get_screen_db()
+    if db is None:
+        return {"written": False, "reason": "no_screen_db", "slug": payload.get("slug")}
+    slug = (payload.get("slug") or "").strip()
+    if not slug:
+        return {"written": False, "reason": "no_slug", "slug": None}
+    try:
+        db.upsert_game_directory(
+            slug=slug,
+            display_name=(payload.get("display_name") or slug.replace("-", " ").title()),
+            kind=(payload.get("kind") or "unknown"),
+            loaded_signature=payload.get("loaded_signature"),
+            build_env=(payload.get("build_env") or "unknown"),
+            app_version=(payload.get("app_version") or "unknown"),
+            seen_in_lobby=bool(payload.get("seen_in_lobby", False)),
+        )
+        return {"written": True, "slug": slug}
+    except Exception as e:  # noqa: BLE001
+        activity.logger.warning(f"upsert_game_directory_activity failed: {e}")
+        return {"written": False, "reason": str(e), "slug": slug}
+
+
+@activity.defn
+async def upsert_game_playbook_activity(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Spec 006 T202 — idempotent game_playbook upsert.
+
+    First call (post-navigate) inserts an empty row keyed on slug so the L4
+    layer is queryable. Subsequent calls from intent_play_game's first-launch
+    bootstrap COALESCE-fill `balance_signature`, `balance_regex`,
+    `round_end_signature`, etc. Anti-hardcoding: nothing per-game in code.
+
+    Payload:
+        slug:                       str    (required)
+        actions_json:               str?
+        round_end_signature:        str?
+        balance_signature:          str?
+        balance_regex:              str?
+        bonus_trigger_signatures:   str?   (JSON array text)
+        auto_dismiss_signatures:    str?   (JSON array text)
+        recovery_json:              str?
+        build_env:                  str?
+        app_version:                str?
+
+    Returns {written: bool, created: bool, slug, reason?}.
+    """
+    db = get_screen_db()
+    if db is None:
+        return {"written": False, "reason": "no_screen_db", "slug": payload.get("slug")}
+    slug = (payload.get("slug") or "").strip()
+    if not slug:
+        return {"written": False, "reason": "no_slug", "slug": None}
+    try:
+        result = db.upsert_game_playbook(
+            slug=slug,
+            actions_json=payload.get("actions_json"),
+            round_end_signature=payload.get("round_end_signature"),
+            balance_signature=payload.get("balance_signature"),
+            balance_regex=payload.get("balance_regex"),
+            bonus_trigger_signatures=payload.get("bonus_trigger_signatures"),
+            auto_dismiss_signatures=payload.get("auto_dismiss_signatures"),
+            recovery_json=payload.get("recovery_json"),
+            build_env=(payload.get("build_env") or "unknown"),
+            app_version=(payload.get("app_version") or "unknown"),
+        )
+        return {
+            "written": bool(result.get("written")),
+            "created": bool(result.get("created")),
+            "slug": slug,
+        }
+    except Exception as e:  # noqa: BLE001
+        activity.logger.warning(f"upsert_game_playbook_activity failed: {e}")
+        return {"written": False, "reason": str(e), "slug": slug}
+
+
+@activity.defn
+async def load_game_context_activity(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Spec 006 T204 — read the L4 game-knowledge envelope.
+
+    Returns the playbook row + kind_name for `generate_genai_prompt(game_context=...)`.
+    Empty when no row exists yet (caller falls back to LLM reasoning without L4).
+
+    Payload:
+        slug: str (required)
+
+    Returns {game_context: {playbook, kind_name} | null, slug, reason}.
+    """
+    db = get_screen_db()
+    if db is None:
+        return {"game_context": None, "reason": "no_screen_db", "slug": payload.get("slug")}
+    slug = (payload.get("slug") or "").strip()
+    if not slug:
+        return {"game_context": None, "reason": "no_slug", "slug": None}
+    try:
+        ctx = db.get_game_context(slug)
+        if ctx is None:
+            return {"game_context": None, "reason": "no_row", "slug": slug}
+        return {"game_context": ctx, "reason": "loaded", "slug": slug}
+    except Exception as e:  # noqa: BLE001
+        activity.logger.warning(f"load_game_context_activity failed: {e}")
+        return {"game_context": None, "reason": str(e), "slug": slug}
+
+
+@activity.defn
 async def record_intent_transition(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Record an intent transition to observation_log for traceability.
 

@@ -15,7 +15,7 @@ notes: "Spec 005 T032. Compiles the operator's free-text prompt into a SessionIn
 
 # intent_parse_session
 
-You are translating the operator's free-text prompt (e.g. `play fanatics spin to win`, `play slingo for 5 minutes`, `play any slot`) into a structured `SessionIntent` envelope. The downstream flow (authenticate → navigate_to_game → load_context → play_game → report) reads this envelope to decide what to play, where to stop, and what report shape to emit.
+You are translating the operator's free-text prompt (e.g. `play fanatics spin to win`, `play slingo for 5 minutes`, `play any slot`) into a structured `SessionIntent` envelope. The downstream flow (authenticate → navigate_to_game → play_game → report) reads this envelope to decide what to play, where to stop, and what report shape to emit.
 
 ## How to proceed
 

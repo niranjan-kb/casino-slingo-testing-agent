@@ -51,9 +51,10 @@ until `liveshow_settle` reappears.
 
 ## Bonus-round behaviour
 Frozen wager — the original stake rides through; no new bets placed during
-the bonus screens. If `bonus_trigger_signature` fires from `game_playbook`,
-the play loop switches to `intent_play_bonus` (US5 spec) and returns to
-base on `liveshow_settle`.
+the bonus screens. When `bonus_trigger_signature` fires from `game_playbook`,
+`intent_play_game` enters its frozen-wager branch (advance via prominent
+Continue/Next/Pick text; never tap Buy/Deposit/Extra Spins) and returns to
+base on `liveshow_settle`. Capped at 30 actions per bonus round.
 
 ## Jurisdiction
 EVONET live games **unavailable in WV**.

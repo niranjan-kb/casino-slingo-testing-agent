@@ -24,20 +24,13 @@ nodes:
     intent: intent_navigate_to_game
     requires: authenticate.success
     input_from: session_intent.target
-
-  load_context:
-    intent: intent_load_game_context
-    requires: navigate_to_game.success
+    # On success, the workflow auto-seeds game_directory + game_playbook and
+    # loads the L4 game-knowledge envelope (replaces deleted load_context node).
 
   play_game:
     intent: intent_play_game
-    requires: load_context.success
+    requires: navigate_to_game.success
     repeat_until: budget.terminal
-
-  play_bonus:
-    intent: intent_play_bonus
-    trigger: bonus_trigger_signature
-    returns_to: play_game
 
   report:
     intent: intent_report
