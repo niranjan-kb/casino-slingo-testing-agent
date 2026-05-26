@@ -147,7 +147,7 @@ Before leaving Phase 2:
 
 For each of the 5 base spins:
 1. `appium_screenshot` to read game state (spins remaining visible in UI)
-2. `LookupCoords(app_context="slingo_cash_eruption", screen_name="main_game", element_name="spin_button")` → get coordinates
+2. `LookupElementCoords(app_context="slingo_cash_eruption", screen_name="main_game", element_name="spin_button")` → get coordinates
 3. `TapCoordinate(x=..., y=...)` to tap spin button
 4. `WaitSeconds(seconds=4)` for animation
 5. `appium_screenshot` to check result
@@ -160,11 +160,11 @@ For each of the 5 base spins:
 **CRITICAL: NEVER tap the in-game END GAME button. It overlaps with the paid SPIN FOR button.**
 
 Reliable exit sequence:
-1. `LookupCoords(app_context="platform", screen_name="game_header", element_name="close_button")` → get coords
+1. `LookupElementCoords(app_context="platform", screen_name="game_header", element_name="close_button")` → get coords
 2. `TapCoordinate(x=..., y=...)` to tap the native close button (OUTSIDE the WebView)
 3. `WaitSeconds(seconds=2)`
 4. `DetectScreen(app_context="platform")` to confirm "Keep Playing?" modal appeared
-5. `LookupCoords(screen_name="keep_playing_modal", element_name="no_thanks_exit")` → tap it
+5. `LookupElementCoords(screen_name="keep_playing_modal", element_name="no_thanks_exit")` → tap it
 6. `TapCoordinate(x=..., y=...)`
 7. `WaitSeconds(seconds=2)`
 8. `appium_screenshot` to verify you're back in the app

@@ -1,4 +1,4 @@
-"""FindElementWithFallback — try multiple selector strategies in one tool call.
+"""FindElement — try multiple selector strategies in one tool call.
 
 Without this, the agent burns one LLM call per failed strategy when
 appium-mcp's `appium_find_element` misses. This tool takes a list of
@@ -35,7 +35,7 @@ _SUPPORTED_STRATEGIES = {
 }
 
 
-async def find_element_with_fallback(args: Dict[str, Any]) -> Dict[str, Any]:
+async def find_element(args: Dict[str, Any]) -> Dict[str, Any]:
     """Try each (strategy, selector) tuple in order; return the first match.
 
     Args:
@@ -134,7 +134,7 @@ def _maybe_upsert_element(
     Records the matched element into screen_elements ONLY when the caller has
     already supplied coordinates (via `x`, `y` in args) — this tool itself
     cannot cheaply extract bounds from appium-mcp's find_element response.
-    SmartTap is the high-volume writer; this is a hook for raw-exploration
+    TapMapped is the high-volume writer; this is a hook for raw-exploration
     callers that already have bounds.
 
     Failures are swallowed and logged; the user-facing return is unchanged.
@@ -168,7 +168,7 @@ def _maybe_upsert_element(
         )
         return True
     except Exception as e:  # noqa: BLE001 — failure-tolerant per FR-027
-        log.warning("find_element_with_fallback: upsert_element failed: %s", e)
+        log.warning("find_element: upsert_element failed: %s", e)
         return False
 
 

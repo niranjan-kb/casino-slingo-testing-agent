@@ -1,4 +1,4 @@
-name: LookupCoords
+name: LookupElementCoords
 platforms: [android]
 intents:
   - intent_authenticate
@@ -9,4 +9,4 @@ risk_tier: low
 side_effects: []
 description: |
   Coordinate lookup from screen_elements for current_screen + intent_target.
-  Read-only; used by SmartTap and TapCoordinate.
+  Read-only; used by TapMapped and TapCoordinate.

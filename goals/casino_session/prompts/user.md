@@ -15,8 +15,8 @@ per-turn objective**, not to this overview.
    signature (recents → category pill → search → scroll, first success wins).
    When this completes, the workflow auto-seeds `game_directory` +
    `game_playbook` and injects the L4 game-knowledge layer for the next turn.
-4. `intent_play_game` — round loop: `ReadBalance → BudgetCheck → action →
-   WaitForSignature → record_round`. Repeats until `BudgetCheck` fires terminal.
+4. `intent_play_game` — round loop: `ReadBalance → CheckBudget → action →
+   WaitForSignature → record_round`. Repeats until `CheckBudget` fires terminal.
    Bonus rounds (slingo / live-show) are handled by an inline frozen-wager
    branch within this intent — no separate intent.
 5. `intent_report` — write `reports/<date>-<workflow_id>.{json,md}` per the
@@ -41,9 +41,9 @@ recovery routes).
 - **Never tap Deposit / Add Funds / Withdraw / Convert FanCash / KYC submit
   buttons.** These are destructive (real money / account state). If a modal
   demands one of these to proceed, dismiss the modal or terminate with
-  `terminal_reason=insufficient_balance` (BudgetCheck) — do not pay your way
+  `terminal_reason=insufficient_balance` (CheckBudget) — do not pay your way
   out of a low-balance state.
-- **Never engage autoplay.** It skips per-round `BudgetCheck` and breaks the
+- **Never engage autoplay.** It skips per-round `CheckBudget` and breaks the
   stop-loss contract. Manual-spin only.
 - **Never echo password or OTP** in any user-facing response or report body.
 - **Numeric strings (OTP, postcodes, dollar amounts) stay quoted as strings**

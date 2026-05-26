@@ -11,9 +11,9 @@ from shared.screen_map_db import ScreenMapDB
 from tools.tool_registry import (
     slingo_detect_screen_tool,
     slingo_generate_report_tool,
-    slingo_lookup_coords_tool,
+    slingo_lookup_element_coords_tool,
     slingo_save_evidence_tool,
-    slingo_smart_tap_tool,
+    slingo_tap_mapped_tool,
     slingo_tap_coordinate_tool,
     slingo_verify_tap_tool,
     slingo_wait_seconds_tool,
@@ -41,11 +41,11 @@ _ANDROID_TOOLS = [
 
 # Local Python tools for the Slingo QA agent
 _SLINGO_TOOLS = [
-    slingo_smart_tap_tool,
+    slingo_tap_mapped_tool,
     slingo_wait_seconds_tool,
     slingo_tap_coordinate_tool,
     slingo_detect_screen_tool,
-    slingo_lookup_coords_tool,
+    slingo_lookup_element_coords_tool,
     slingo_verify_tap_tool,
     slingo_save_evidence_tool,
     slingo_generate_report_tool,

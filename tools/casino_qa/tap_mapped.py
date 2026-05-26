@@ -23,7 +23,7 @@ def _record_transition_safely(db, **kwargs) -> None:
         )
 
 
-async def smart_tap(args: dict) -> dict:
+async def tap_mapped(args: dict) -> dict:
     """Lookup coordinates, tap, wait, verify, and update confidence — all in one call.
 
     Guarantees the learning loop runs every time. The DB is always consulted
@@ -67,7 +67,7 @@ async def smart_tap(args: dict) -> dict:
                 guess["x"], guess["y"],
                 source="cross_device",
                 element_type=guess.get("element_type"),
-                intent=guess.get("intent"),
+                purpose=guess.get("purpose"),
                 confidence=0.3,
             )
             elem = db.get_element_coords(profile_id, app_context, screen_name, element_name)
@@ -132,14 +132,9 @@ async def smart_tap(args: dict) -> dict:
                     outcome="success",
                 )
             else:
-                db.log_observation(
-                    device_profile_id=profile_id,
-                    screen_name=screen_name,
-                    element_name=element_name,
-                    action="smart_tap",
-                    expected_result=f"transition to {expected_screen or 'next screen'}",
-                    actual_result=f"still on {current_screen}",
-                )
+                # Spec 006 T604: tap-miss diagnostics flow through
+                # transition_outcomes (success=False edge below) + the
+                # observation_log; the legacy `run_observations` write is gone.
                 # Verified divergence: decrement the expected (wrong) edge
                 # and upsert the actual edge as a competing transition.
                 if expected_screen and current_screen != expected_screen:

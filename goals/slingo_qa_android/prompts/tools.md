@@ -6,43 +6,43 @@ You have TWO types of tools: **Appium MCP tools** (device interaction) and **loc
 
 | Tool | Purpose | Key Arguments |
 |------|---------|---------------|
-| **`SmartTap`** | **All-in-one: lookup → tap → wait → verify → update DB** | `app_context`, `screen_name`, `element_name`, `expected_screen?`, `wait_seconds?` |
+| **`TapMapped`** | **All-in-one: lookup → tap → wait → verify → update DB** | `app_context`, `screen_name`, `element_name`, `expected_screen?`, `wait_seconds?` |
 | `TapCoordinate` | Tap at raw pixel coordinates (no DB) | `x`, `y` |
 | `WaitSeconds` | Pause for N seconds | `seconds` (max 30) |
 | `DetectScreen` | Identify which screen is showing | `app_context` |
-| `LookupCoords` | Get stored coordinates for an element | `app_context`, `screen_name`, `element_name` |
+| `LookupElementCoords` | Get stored coordinates for an element | `app_context`, `screen_name`, `element_name` |
 | `VerifyTap` | Confirm a tap caused expected transition | `app_context`, `screen_name`, `element_name`, `tapped_x`, `tapped_y`, `expected_screen` |
 | `SaveEvidence` | Save screenshot as labeled evidence | `screenshot_path`, `label` |
 | `GenerateReport` | Produce structured QA test report | `starting_balance`, `ending_balance`, `spins_played`, etc. |
 
-### SmartTap — the default for all known elements
+### TapMapped — the default for all known elements
 
-`SmartTap` replaces the 5-step manual sequence with a single call. It:
+`TapMapped` replaces the 5-step manual sequence with a single call. It:
 1. Looks up coordinates + confidence from the screen map DB
 2. Taps the coordinates
 3. Waits for the UI transition
 4. Verifies the screen changed (if the element hasn't graduated)
 5. Updates confidence in the DB based on the result
 
-**Use SmartTap whenever you know the screen_name and element_name.** It guarantees the learning loop runs every time — the DB always gets consulted before tapping and updated after.
+**Use TapMapped whenever you know the screen_name and element_name.** It guarantees the learning loop runs every time — the DB always gets consulted before tapping and updated after.
 
 ```
-SmartTap(app_context="platform", screen_name="home", element_name="search_bar", expected_screen="search")
+TapMapped(app_context="platform", screen_name="home", element_name="search_bar", expected_screen="search")
 ```
 
 Returns: `{success, tapped: {x, y}, confidence, verified, current_screen}`
 
-### When NOT to use SmartTap
+### When NOT to use TapMapped
 
 - **Unknown coordinates**: Element not in the DB yet → use `appium_find_element` + `appium_click` to discover it
 - **Raw pixel taps**: You already know exact coordinates from a screenshot → use `TapCoordinate`
-- **Just need to look up, not tap**: Use `LookupCoords` alone
+- **Just need to look up, not tap**: Use `LookupElementCoords` alone
 - **Just need to detect screen**: Use `DetectScreen` alone
 
 ### Legacy manual flow (still available for edge cases):
 ```
 1. DetectScreen(app_context="platform")         → know which screen
-2. LookupCoords(screen_name=..., element=...)   → get coordinates
+2. LookupElementCoords(screen_name=..., element=...)   → get coordinates
 3. TapCoordinate(x=..., y=...)                  → tap it
 4. WaitSeconds(seconds=2)                       → let UI transition
 5. VerifyTap(expected_screen=...)               → confirm it worked
@@ -99,7 +99,7 @@ The element doesn't match. **Don't loop** — call `appium_get_page_source` once
 - In-game balance text
 - Any element inside the WebView iframe
 
-For WebView elements, use `LookupCoords` → `TapCoordinate`.
+For WebView elements, use `LookupElementCoords` → `TapCoordinate`.
 
 ## appium_set_value — Typing Tips
 

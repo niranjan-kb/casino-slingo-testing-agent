@@ -13,15 +13,15 @@ from goals.casino_session.prompt_loader import (
 from models.tool_definitions import AgentGoal
 from shared.mcp_config import get_appium_mcp_server_definition
 from tools.tool_registry import (
-    slingo_budget_check_tool,
+    slingo_check_budget_tool,
     slingo_detect_screen_tool,
-    slingo_find_element_with_fallback_tool,
-    slingo_lookup_coords_tool,
+    slingo_find_element_tool,
+    slingo_lookup_element_coords_tool,
     slingo_parse_session_intent_tool,
     slingo_read_balance_tool,
     slingo_resolve_directory_tool,
     slingo_save_evidence_tool,
-    slingo_smart_tap_tool,
+    slingo_tap_mapped_tool,
     slingo_tap_coordinate_tool,
     slingo_verify_tap_tool,
     slingo_wait_for_signature_tool,
@@ -47,19 +47,19 @@ _CASINO_SESSION_APPIUM_TOOLS = [
 ]
 
 _CASINO_SESSION_LOCAL_TOOLS = [
-    slingo_smart_tap_tool,
-    slingo_find_element_with_fallback_tool,
+    slingo_tap_mapped_tool,
+    slingo_find_element_tool,
     slingo_wait_seconds_tool,
     slingo_tap_coordinate_tool,
     slingo_detect_screen_tool,
-    slingo_lookup_coords_tool,
+    slingo_lookup_element_coords_tool,
     slingo_verify_tap_tool,
     slingo_save_evidence_tool,
     # Spec 005 (T036–T040): play-flow QA tools.
     slingo_parse_session_intent_tool,
     slingo_resolve_directory_tool,
     slingo_read_balance_tool,
-    slingo_budget_check_tool,
+    slingo_check_budget_tool,
     slingo_wait_for_signature_tool,
 ]
 

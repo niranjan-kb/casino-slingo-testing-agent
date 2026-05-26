@@ -2,7 +2,7 @@
 # and platforms this tool serves so the planner-prompt assembler can filter the
 # tool_choice enum per turn (FR-007 / R2).
 
-name: SmartTap
+name: TapMapped
 platforms: [android]
 intents:
   - intent_authenticate

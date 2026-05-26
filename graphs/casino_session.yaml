@@ -38,7 +38,7 @@ nodes:
 
 guards:
   budget:
-    activity: BudgetCheck
+    activity: CheckBudget
     after: each_play_round
     terminate: true
     route: report

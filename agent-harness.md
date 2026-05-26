@@ -108,7 +108,7 @@ The agent is one workflow, walking a graph, picking from a closed set of intents
    │                                                                     │
    │   READ via screen_graph.find_path  (read-time decay: build mismatch │
    │                                     ×0.5, staleness ramp past 30d)  │
-   │   WRITE via SmartTap / VerifyTap / FindElementWithFallback hooks    │
+   │   WRITE via TapMapped / VerifyTap / FindElement hooks    │
    └─────────────────────────────────────────────────────────────────────┘
                                      ▲
                                      │ hot reads + auto-record
@@ -185,7 +185,7 @@ The agent is one workflow, walking a graph, picking from a closed set of intents
               ▼
       ┌──────────────────────────┐
       │ MCP tool? → appium-mcp   │   AUTO-RECORD on every verified tap:
-      │ Native?   → smart_tap /  │   smart_tap → record_transition_observation
+      │ Native?   → tap_mapped /  │   tap_mapped → record_transition_observation
       │            verify_tap /  │   verify_tap → record_transition_observation
       │            find_element/ │   find_element → upsert_element (best-effort)
       │            tap_coord ... │
@@ -263,7 +263,7 @@ flowchart TB
 
     subgraph Tools["Tool Surface"]
         MCP[appium-mcp :3100<br/>SSE / PINNED 1.56.3]
-        Native[tools/slingo_qa/<br/>SmartTap, VerifyTap,<br/>FindElement, TapCoord, ...]
+        Native[tools/slingo_qa/<br/>TapMapped, VerifyTap,<br/>FindElement, TapCoord, ...]
         Device[Android emulator]
     end
 
@@ -319,7 +319,7 @@ flowchart TB
 | **I. Map primary, LLM fallback** | every Native tool reads the map first via `propose_next_step`; LLM only runs when the map can't answer |
 | **II. One agent, intents at runtime** | `_INTENT_REGISTRY` + `active_intent` enum on `plan_next_action` |
 | **III. Observers never halt** | `_run_observer_tick` is wrapped in try/except in the workflow |
-| **IV. Self-healing** | `FindElementWithFallback` + LLM-fallback path in tools |
+| **IV. Self-healing** | `FindElement` + LLM-fallback path in tools |
 | **V. Risk tiers gate confidence** | `screen_map_db.should_verify_tap` |
 | **VI. Operational soul in prompts only** | `intents/*.md` ≤600 tokens, no selectors/fallbacks |
 | **VII. Human approval at financial boundaries** | `SHOW_CONFIRM` env + workflow `waiting_for_confirm` flag |
@@ -336,6 +336,6 @@ flowchart TB
 2. `intents/intent_authenticate.md` — what an intent looks like
 3. `shared/screen_map_db.py` schema (lines ~670+) — the DB tables
 4. `shared/screen_graph.py` `find_path` — how the agent walks the graph
-5. `tools/slingo_qa/smart_tap.py` — the canonical lookup → tap → verify → record loop
+5. `tools/slingo_qa/tap_mapped.py` — the canonical lookup → tap → verify → record loop
 6. `workflows/agent_goal_workflow.py` `run()` — the master loop
 7. `activities/tool_activities.py` `_build_plan_next_action_tool` — how tool-use forcing works

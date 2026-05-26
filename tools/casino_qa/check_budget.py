@@ -1,4 +1,4 @@
-"""BudgetCheck — pre-action budget gate for the play loop.
+"""CheckBudget — pre-action budget gate for the play loop.
 
 Per spec 005 T039 / FR-003 / FR-004 / FR-015. Evaluates the four bounds in
 priority order and returns the first one that fires:
@@ -33,7 +33,7 @@ _TERMINAL_REASONS = {
 }
 
 
-def budget_check(args: Dict[str, Any]) -> Dict[str, Any]:
+def check_budget(args: Dict[str, Any]) -> Dict[str, Any]:
     """Evaluate the play-loop budget. Returns a decision dict.
 
     Args (passed from the workflow):

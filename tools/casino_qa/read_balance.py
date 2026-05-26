@@ -4,7 +4,7 @@ per-game playbook's signature + regex.
 Per spec 005 T038 / FR-009 / gaps-and-guardrails §A5. Bounded retry budget
 (`min(3, ceil(1/balance_read_confidence))` per gap A5). Failure is silent to
 the goal loop (Constitution III) but bumps a `balance_consecutive_failures`
-counter that the workflow threads into BudgetCheck — three failures in a row
+counter that the workflow threads into CheckBudget — three failures in a row
 trip the `balance_unparseable` terminal there.
 
 Anti-hardcoding: NO regex patterns live in this file. The regex is per-game

@@ -73,7 +73,7 @@ Bets, deposits, withdrawals, promo redemptions, FanCash conversions REQUIRE huma
 ### Map writeback
 
 - **MW-1** Every verified tap-and-verify MUST write to `screen_transitions` via `record_transition_observation(success=True|False)`. Verified divergences upsert competing edges.
-- **MW-2** Every `FindElementWithFallback` hit MUST write to `screen_elements` keyed by current screen + intent target.
+- **MW-2** Every `FindElement` hit MUST write to `screen_elements` keyed by current screen + intent target.
 - **MW-3** Confidence is read-time-decayed by build mismatch and staleness window; never destructively modified.
 - **MW-4** Unknown screens (`obs.unknown_screen`) seen ≥3 times across ≥2 runs MUST emit a signature proposal artifact. Auto-promotion is forbidden — explicit accept step required.
 

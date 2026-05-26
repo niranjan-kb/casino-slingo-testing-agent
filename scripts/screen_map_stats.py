@@ -96,7 +96,10 @@ def print_recent_corrections(db: ScreenMapDB, profile_id: str = None, limit: int
     print(f"  Recent Corrections (learning events)")
     print(f"{'=' * 70}")
 
-    obs = db.get_recent_observations(profile_id, limit=limit)
+    # Spec 006 T604: `run_observations` was dropped. The corrections data
+    # used to live there; until/unless we rewire from observation_log,
+    # this stats block stays empty.
+    obs: list = []
     corrections = [o for o in obs if o.get("correction")]
 
     if not corrections:

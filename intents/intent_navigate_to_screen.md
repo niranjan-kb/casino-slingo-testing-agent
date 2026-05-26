@@ -29,7 +29,7 @@ Any seeded `logical_screens` row is a legitimate target. The reliable ones today
 
 1. **Resolve target.** If `SessionIntent.target` names a game (kind/slug/query), this is the wrong intent — flag for the workflow and emit done. Otherwise resolve to a `logical_id` from the anchor list.
 2. **Detect current screen** via `DetectScreen`.
-3. **Walk the graph.** If `screen_transitions` has a path current → target (with `exclude_destructive=true`), take it one step at a time via `SmartTap`. Each step's verb, target, args come from the recorded transition — don't invent them.
+3. **Walk the graph.** If `screen_transitions` has a path current → target (with `exclude_destructive=true`), take it one step at a time via `TapMapped`. Each step's verb, target, args come from the recorded transition — don't invent them.
 4. **No path? Recover via the home anchor.** Tap the Home bottom-nav item OR `appium_mobile_press_key key="BACK"` (cap 5). From `home`, re-detect and re-plan once.
 5. **On match**, emit `next='done'` with `active_intent=intent_navigate_to_screen`.
 

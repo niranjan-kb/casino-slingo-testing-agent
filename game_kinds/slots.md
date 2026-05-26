@@ -36,7 +36,7 @@ bet-amount controls, bonus mini-games (free spins, pick-em, multipliers).
 - LOW: paytable, info, help, sound
 
 ## Constraints
-Autoplay is NEVER engaged by the agent — it skips per-round BudgetCheck.
+Autoplay is NEVER engaged by the agent — it skips per-round CheckBudget.
 Manual-spin only.
 
 ## Provider variants

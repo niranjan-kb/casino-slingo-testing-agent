@@ -28,8 +28,8 @@ slingo_detect_screen_tool = ToolDefinition(
     ],
 )
 
-slingo_lookup_coords_tool = ToolDefinition(
-    name="LookupCoords",
+slingo_lookup_element_coords_tool = ToolDefinition(
+    name="LookupElementCoords",
     description="Look up stored coordinates for a UI element from the screen map database. Returns x, y, confidence, and whether verification is needed.",
     arguments=[
         ToolArgument(name="app_context", type="string", description="'platform' or game name (e.g. 'slingo_cash_eruption')"),
@@ -51,8 +51,8 @@ slingo_verify_tap_tool = ToolDefinition(
     ],
 )
 
-slingo_find_element_with_fallback_tool = ToolDefinition(
-    name="FindElementWithFallback",
+slingo_find_element_tool = ToolDefinition(
+    name="FindElement",
     description=(
         "Find a native UI element by trying multiple (strategy, selector) candidates in order. "
         "Returns the first match's elementUUID — which plugs straight into appium_click, "
@@ -75,9 +75,9 @@ slingo_find_element_with_fallback_tool = ToolDefinition(
     ],
 )
 
-slingo_smart_tap_tool = ToolDefinition(
-    name="SmartTap",
-    description="All-in-one tap tool: looks up coordinates from the DB, taps, waits for transition, verifies the result, and updates confidence — guaranteeing the learning loop runs every time. Use this instead of separate LookupCoords → TapCoordinate → WaitSeconds → VerifyTap calls.",
+slingo_tap_mapped_tool = ToolDefinition(
+    name="TapMapped",
+    description="All-in-one tap tool: looks up coordinates from the DB, taps, waits for transition, verifies the result, and updates confidence — guaranteeing the learning loop runs every time. Use this instead of separate LookupElementCoords → TapCoordinate → WaitSeconds → VerifyTap calls.",
     arguments=[
         ToolArgument(name="app_context", type="string", description="'platform' or game name (e.g. 'slingo_cash_eruption')"),
         ToolArgument(name="screen_name", type="string", description="Current screen name (e.g. 'home', 'main_game', 'login')"),
@@ -151,7 +151,7 @@ slingo_read_balance_tool = ToolDefinition(
     description=(
         "Extract the wallet balance from a page-source dump using the per-game playbook's "
         "balance_signature + balance_regex. Failure increments balance_consecutive_failures "
-        "(BudgetCheck owns the balance_unparseable terminal at threshold 3). NO regex is "
+        "(CheckBudget owns the balance_unparseable terminal at threshold 3). NO regex is "
         "hardcoded here — patterns live in game_playbook, populated on first observation."
     ),
     arguments=[
@@ -162,8 +162,8 @@ slingo_read_balance_tool = ToolDefinition(
     ],
 )
 
-slingo_budget_check_tool = ToolDefinition(
-    name="BudgetCheck",
+slingo_check_budget_tool = ToolDefinition(
+    name="CheckBudget",
     description=(
         "Pre-action budget gate. Returns the first-firing terminal in priority order: "
         "balance_unparseable > budget_exhausted > n_spins > max_minutes. Env MAX_LOSS_USD "

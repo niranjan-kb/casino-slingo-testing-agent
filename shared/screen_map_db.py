@@ -54,8 +54,33 @@ class ScreenMapDB:
         self._ensure_build_columns(conn)
         self._ensure_spec_005_columns(conn)
         self._ensure_spec_006_schema(conn)
+        self._drop_run_observations(conn)
+        self._rename_screen_elements_intent_column(conn)
         self._seed_spec_006_defaults(conn)
         conn.commit()
+
+    def _drop_run_observations(self, conn: sqlite3.Connection) -> None:
+        """Spec 006 T604: remove the legacy `run_observations` table + its
+        index from existing on-disk DBs. Replaced by the observer
+        framework's observation_log + the transition_outcomes split.
+        Idempotent — safe to call against a fresh DB where the table never
+        existed in the first place.
+        """
+        conn.execute("DROP INDEX IF EXISTS idx_observations_device_screen")
+        conn.execute("DROP TABLE IF EXISTS run_observations")
+
+    def _rename_screen_elements_intent_column(
+        self, conn: sqlite3.Connection
+    ) -> None:
+        """Spec 006 T602: rename `screen_elements.intent` → `purpose` on
+        existing DBs. SQLite 3.25+ supports RENAME COLUMN directly.
+        Idempotent — checks the current schema before issuing the ALTER.
+        """
+        cols = {row["name"] for row in conn.execute("PRAGMA table_info(screen_elements)").fetchall()}
+        if "purpose" in cols:
+            return  # already migrated
+        if "intent" in cols:
+            conn.execute("ALTER TABLE screen_elements RENAME COLUMN intent TO purpose")
 
     def _ensure_build_columns(self, conn: sqlite3.Connection) -> None:
         """Idempotent ALTER for the build_env / app_package columns added in feature 004."""
@@ -383,16 +408,23 @@ class ScreenMapDB:
         y: int,
         source: str = "seed",
         element_type: Optional[str] = None,
-        intent: Optional[str] = None,
+        purpose: Optional[str] = None,
         confidence: float = 0.5,
     ) -> None:
-        """Insert or update an element's coordinates."""
+        """Insert or update an element's coordinates.
+
+        Spec 006 T602: the `purpose` column (was `intent`, renamed
+        2026-05-22) is the human-readable semantic label for what this
+        element does ("spin_button label", "OTP submit"). It was renamed
+        to avoid collision with the spec-004 `intent_*` agent-level
+        concept that names per-turn objectives.
+        """
         build_env, app_package = _current_build_meta()
         conn = self._get_conn()
         conn.execute(
             """INSERT INTO screen_elements
                    (device_profile_id, app_context, screen_name, element_name, x, y,
-                    element_type, intent, confidence, source, last_verified,
+                    element_type, purpose, confidence, source, last_verified,
                     build_env, app_package)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(device_profile_id, app_context, screen_name, element_name)
@@ -400,14 +432,14 @@ class ScreenMapDB:
                    x = excluded.x,
                    y = excluded.y,
                    element_type = COALESCE(excluded.element_type, element_type),
-                   intent = COALESCE(excluded.intent, intent),
+                   purpose = COALESCE(excluded.purpose, purpose),
                    confidence = excluded.confidence,
                    source = excluded.source,
                    last_verified = excluded.last_verified,
                    build_env = excluded.build_env,
                    app_package = excluded.app_package""",
             (device_profile_id, app_context, screen_name, element_name, x, y,
-             element_type, intent, confidence, source, datetime.utcnow().isoformat(),
+             element_type, purpose, confidence, source, datetime.utcnow().isoformat(),
              build_env, app_package),
         )
         conn.commit()
@@ -511,70 +543,12 @@ class ScreenMapDB:
         )
         conn.commit()
 
-    # ── Run Observations (episodic memory) ───────────────────────────
-
-    def log_observation(
-        self,
-        device_profile_id: str,
-        screen_name: str,
-        element_name: Optional[str] = None,
-        action: Optional[str] = None,
-        expected_result: Optional[str] = None,
-        actual_result: Optional[str] = None,
-        correction: Optional[str] = None,
-        screenshot_path: Optional[str] = None,
-    ) -> int:
-        """Log an observation from a run. Returns the observation ID."""
-        conn = self._get_conn()
-        cursor = conn.execute(
-            """INSERT INTO run_observations
-                   (device_profile_id, screen_name, element_name, action,
-                    expected_result, actual_result, correction, screenshot_path)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (device_profile_id, screen_name, element_name, action,
-             expected_result, actual_result, correction, screenshot_path),
-        )
-        conn.commit()
-        return cursor.lastrowid
-
-    def get_recent_observations(
-        self,
-        device_profile_id: Optional[str] = None,
-        screen_name: Optional[str] = None,
-        limit: int = 20,
-    ) -> List[Dict[str, Any]]:
-        """Get recent observations, optionally filtered."""
-        conn = self._get_conn()
-        query = "SELECT * FROM run_observations WHERE 1=1"
-        params: list = []
-        if device_profile_id:
-            query += " AND device_profile_id = ?"
-            params.append(device_profile_id)
-        if screen_name:
-            query += " AND screen_name = ?"
-            params.append(screen_name)
-        query += " ORDER BY timestamp DESC LIMIT ?"
-        params.append(limit)
-        rows = conn.execute(query, params).fetchall()
-        return [dict(r) for r in rows]
-
-    def get_corrections_for_element(
-        self,
-        screen_name: str,
-        element_name: str,
-        limit: int = 5,
-    ) -> List[Dict[str, Any]]:
-        """Get recent corrections for a specific element across all devices."""
-        conn = self._get_conn()
-        rows = conn.execute(
-            """SELECT * FROM run_observations
-               WHERE screen_name = ? AND element_name = ? AND correction IS NOT NULL
-               ORDER BY timestamp DESC LIMIT ?""",
-            (screen_name, element_name, limit),
-        ).fetchall()
-        return [dict(r) for r in rows]
-
     # ── Utilities ────────────────────────────────────────────────────
+    # Spec 006 T604: the `run_observations` per-tap diagnostic ledger and
+    # its three accessors (log_observation, get_recent_observations,
+    # get_corrections_for_element) were dropped on 2026-05-22 — superseded
+    # by the observer framework's observation_log + the transition_outcomes
+    # / transition_observations split.
 
     def get_low_confidence_elements(
         self,
@@ -600,7 +574,6 @@ class ScreenMapDB:
             "signatures": conn.execute("SELECT COUNT(*) FROM screen_signatures").fetchone()[0],
             "transitions": conn.execute("SELECT COUNT(*) FROM screen_transitions").fetchone()[0],
             "games": conn.execute("SELECT COUNT(*) FROM game_catalog").fetchone()[0],
-            "observations": conn.execute("SELECT COUNT(*) FROM run_observations").fetchone()[0],
             "observer_observations": conn.execute(
                 "SELECT COUNT(*) FROM observation_log"
             ).fetchone()[0],
@@ -1283,7 +1256,7 @@ CREATE TABLE IF NOT EXISTS screen_elements (
     x INTEGER NOT NULL,
     y INTEGER NOT NULL,
     element_type TEXT,                               -- 'button', 'input', 'text', 'region'
-    intent TEXT,                                     -- human-readable purpose
+    purpose TEXT,                                    -- human-readable purpose (renamed from `intent` in spec 006 T602 to avoid collision with intent_* agent-level concept)
     confidence REAL DEFAULT 0.5,                     -- 0.0 to 1.0
     times_used INTEGER DEFAULT 0,
     times_succeeded INTEGER DEFAULT 0,
@@ -1303,28 +1276,16 @@ CREATE TABLE IF NOT EXISTS screen_signatures (
     UNIQUE(screen_name, app_context, signature_type, signature_value)
 );
 
-CREATE TABLE IF NOT EXISTS run_observations (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    device_profile_id TEXT,
-    screen_name TEXT,
-    element_name TEXT,
-    action TEXT,                                      -- 'tap', 'type', 'find_element', 'screenshot'
-    expected_result TEXT,
-    actual_result TEXT,
-    correction TEXT,
-    screenshot_path TEXT,
-    FOREIGN KEY (device_profile_id) REFERENCES device_profiles(id)
-);
+-- Spec 006 T604: `run_observations` (per-tap diagnostic ledger) dropped
+-- 2026-05-22 — superseded by observer framework's observation_log +
+-- transition_outcomes/transition_observations split. The migration block
+-- below removes the table + its index from existing on-disk DBs.
 
 CREATE INDEX IF NOT EXISTS idx_elements_lookup
     ON screen_elements(device_profile_id, app_context, screen_name, element_name);
 
 CREATE INDEX IF NOT EXISTS idx_elements_confidence
     ON screen_elements(device_profile_id, confidence);
-
-CREATE INDEX IF NOT EXISTS idx_observations_device_screen
-    ON run_observations(device_profile_id, screen_name);
 
 CREATE INDEX IF NOT EXISTS idx_signatures_screen
     ON screen_signatures(screen_name, app_context);

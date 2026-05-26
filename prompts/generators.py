@@ -461,7 +461,7 @@ def _format_history(conversation_history: Any) -> str:
     T024 (page-source strip): any tool-result string field that looks like
     XML/page-source (length > 1200 chars and starts with '<' or contains
     '<hierarchy') is replaced with a `{hash, len, hint}` stub. The model never
-    sees the raw XML — `FindElementWithFallback` consumed it locally; the
+    sees the raw XML — `FindElement` consumed it locally; the
     planner only needs the outcome.
 
     T027 (history compactor): the most recent N messages (default 2) are kept

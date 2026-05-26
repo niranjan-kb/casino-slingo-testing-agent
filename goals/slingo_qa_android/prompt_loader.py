@@ -206,9 +206,10 @@ def build_memory_section(db: ScreenMapDB, device_profile_id: str) -> str:
     signatures = db.get_screen_signatures("platform")
     sig_text = format_signatures(signatures)
 
-    # Recent observations
-    observations = db.get_recent_observations(device_profile_id, limit=10)
-    obs_text = format_observations(observations)
+    # Recent observations — spec 006 T604 removed `run_observations`; the
+    # legacy prompt template gets an empty block until/unless it's rewired
+    # to read from `observation_log`. Legacy goal is slated for removal.
+    obs_text = format_observations([])
 
     # Inject into template
     result = template.replace("{{PLATFORM_COORDINATES}}", platform_table)

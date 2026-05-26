@@ -185,7 +185,7 @@ class AgentGoalWorkflow:
         # Spec 006 T205 state — ReadBalance retry budget enforcement. Counts
         # consecutive ReadBalance results where `found` is False; reset on a
         # successful read. When it hits 3, the workflow appends a strong
-        # directive prompt that nudges the LLM to invoke BudgetCheck with
+        # directive prompt that nudges the LLM to invoke CheckBudget with
         # this counter so the `balance_unparseable` terminal fires there.
         self.balance_consecutive_failures: int = 0
         self._balance_terminal_directive_emitted: bool = False
@@ -879,7 +879,7 @@ class AgentGoalWorkflow:
                     self.prompt_queue.append(
                         "### ReadBalance has returned not-found "
                         f"{self.balance_consecutive_failures} times in a row. "
-                        "Call BudgetCheck NOW with "
+                        "Call CheckBudget NOW with "
                         f"balance_consecutive_failures={self.balance_consecutive_failures} "
                         "to fire the `balance_unparseable` terminal. Then transition "
                         "active_intent to intent_report and emit `next='done'`."

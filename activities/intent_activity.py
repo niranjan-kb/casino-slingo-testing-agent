@@ -152,7 +152,7 @@ async def load_runtime_facts_activity(payload: Dict[str, Any]) -> Dict[str, Any]
         select_device_result:       optional dict from a prior select_device call
 
     Returns the full RuntimeFacts as a JSON-serialisable dict; the workflow
-    stores it as state and threads it into prompt assembly (L3) and BudgetCheck.
+    stores it as state and threads it into prompt assembly (L3) and CheckBudget.
 
     Captured in workflow history so replay reads the same facts deterministically.
     """

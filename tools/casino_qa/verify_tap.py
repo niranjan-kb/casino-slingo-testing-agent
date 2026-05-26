@@ -78,14 +78,9 @@ async def verify_tap(args: dict) -> dict:
                 outcome="success",
             )
         else:
-            db.log_observation(
-                device_profile_id=profile_id,
-                screen_name=screen_name,
-                element_name=element_name,
-                action="tap",
-                expected_result=f"transition to {expected_screen or 'next screen'}",
-                actual_result=f"still on {current_screen}",
-            )
+            # Spec 006 T604: tap-miss diagnostics now flow through the
+            # transition_outcomes path below + the observer framework's
+            # observation_log; the legacy `run_observations` write is gone.
             # Verified divergence: decrement expected, upsert actual
             if expected_screen and current_screen != expected_screen:
                 _record_transition_safely(

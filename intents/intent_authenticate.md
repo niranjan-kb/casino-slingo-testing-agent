@@ -20,8 +20,8 @@ You are authenticating the casino app. Reach a logged-in home/lobby screen. When
 ## How to proceed
 
 1. Detect the current screen (DetectScreen).
-2. If the screen is known and a path exists from current → an `end_state_signatures` entry, walk the path one step at a time using SmartTap. Each step's verb, target, and args come from the recorded transition; you do not invent them.
-3. If no path exists or the current screen is unknown, read the page-source and reason from it toward the end-state. Use FindElementWithFallback for raw element lookup; SmartTap for tap-and-verify; TapCoordinate as the last-resort coord fallback. Auto-record fires automatically — you do not need to record manually.
+2. If the screen is known and a path exists from current → an `end_state_signatures` entry, walk the path one step at a time using TapMapped. Each step's verb, target, and args come from the recorded transition; you do not invent them.
+3. If no path exists or the current screen is unknown, read the page-source and reason from it toward the end-state. Use FindElement for raw element lookup; TapMapped for tap-and-verify; TapCoordinate as the last-resort coord fallback. Auto-record fires automatically — you do not need to record manually.
 4. When the success_check is satisfied, emit `next='done'` with `active_intent=intent_authenticate`. The workflow will mark this intent complete and prompt you to pick the next active_intent.
 
 ## Scope

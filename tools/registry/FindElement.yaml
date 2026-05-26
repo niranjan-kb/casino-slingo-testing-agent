@@ -1,4 +1,4 @@
-name: FindElementWithFallback
+name: FindElement
 platforms: [android]
 intents:
   - intent_authenticate

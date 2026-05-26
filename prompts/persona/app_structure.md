@@ -102,7 +102,7 @@ Dismissal defaults — not exhaustive. If you hit a modal not listed, dump page-
 
 ## Deposit / destructive-action avoidance
 
-**NEVER** tap any of: Deposit, Add Funds, Withdraw, Convert FanCash, KYC Submit, Cancel Withdrawal, the Fanatics logo on non-debug builds, or any Confirm/Submit inside the Quick Deposit bottom sheet. Inside `intent_play_game`, only the SmartTap+VerifyTap pair for `spin_button` / `place_bet` (HIGH-risk tier — always verified) is allowed. If a flow appears to require any other financial action, `SaveEvidence` and terminate.
+**NEVER** tap any of: Deposit, Add Funds, Withdraw, Convert FanCash, KYC Submit, Cancel Withdrawal, the Fanatics logo on non-debug builds, or any Confirm/Submit inside the Quick Deposit bottom sheet. Inside `intent_play_game`, only the TapMapped+VerifyTap pair for `spin_button` / `place_bet` (HIGH-risk tier — always verified) is allowed. If a flow appears to require any other financial action, `SaveEvidence` and terminate.
 
 ## Jurisdictional guard
 

@@ -46,7 +46,7 @@ _persistent_mcp_manager: Optional[MCPClientManager] = None
 # Every agent_toolPlanner LLM call forces tool_choice to this tool, so the
 # model's output shape is guaranteed by the API instead of by prompt-prayer.
 # The `tool` field inside this tool's arguments names the user-facing tool
-# the orchestrator should run next (e.g. "appium_click", "FindElementWithFallback").
+# the orchestrator should run next (e.g. "appium_click", "FindElement").
 #
 # We build the schema per-call so the `tool` field can be constrained to an
 # enum of the tools actually available in the current goal — the model

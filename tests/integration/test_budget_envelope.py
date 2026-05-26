@@ -6,7 +6,7 @@ re-applies it. The downstream run report must surface BOTH the requested
 and the effective value so an auditor can see the cap math.
 
 The test exercises the full pipeline:
-    prompt → ParseSessionIntent → lower_budget → BudgetCheck → run_report
+    prompt → ParseSessionIntent → lower_budget → CheckBudget → run_report
 without spinning up Temporal — `parse_session_intent` and `lower_budget` are
 pure functions, and `generate_report` writes JSON to a tmp dir.
 """
@@ -27,7 +27,7 @@ from shared.runtime_facts import (
     TargetFacts,
     lower_budget,
 )
-from tools.casino_qa.budget_check import budget_check
+from tools.casino_qa.check_budget import check_budget
 from tools.casino_qa.parse_session_intent import parse_session_intent
 
 
@@ -117,14 +117,14 @@ def test_lower_budget_returns_new_frozen_instance() -> None:
     assert facts.constraints.max_loss_usd == 10.0  # original unchanged
 
 
-# ── BudgetCheck terminal selection ──
+# ── CheckBudget terminal selection ──
 
 
-def test_budget_check_fires_on_exact_loss() -> None:
+def test_check_budget_fires_on_exact_loss() -> None:
     """Crossing the loss line triggers `budget_exhausted` at exactly -max_loss."""
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).isoformat()
-    decision = budget_check({
+    decision = check_budget({
         "balance_now": 90.0,
         "balance_session_start": 100.0,
         "spins_played": 1,
@@ -138,11 +138,11 @@ def test_budget_check_fires_on_exact_loss() -> None:
     assert decision.get("should_continue") is False, decision
 
 
-def test_budget_check_does_not_fire_below_threshold() -> None:
+def test_check_budget_does_not_fire_below_threshold() -> None:
     """A loss below the cap leaves the play loop running."""
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).isoformat()
-    decision = budget_check({
+    decision = check_budget({
         "balance_now": 95.0,
         "balance_session_start": 100.0,
         "spins_played": 1,

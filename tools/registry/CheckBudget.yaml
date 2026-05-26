@@ -1,4 +1,4 @@
-name: BudgetCheck
+name: CheckBudget
 platforms: [android, ios, web]
 intents: [intent_play_game]
 risk_tier: high

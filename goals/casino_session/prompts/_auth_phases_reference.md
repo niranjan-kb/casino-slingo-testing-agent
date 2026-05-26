@@ -16,7 +16,7 @@ Your job: launch the app, dismiss any pre-login modals, complete the Fanatics ON
 3. `appium_screenshot` — record the first frame.
 4. `appium_get_page_source` — read the tree.
 5. **Classify** by inspecting the tree. Branch on the first match:
-   - **App permission/onboarding modal** (e.g. "Precise location required", "Get rewarded — Fanatically", "Welcome to Fanatics"): use `FindElementWithFallback` with these `candidates`:
+   - **App permission/onboarding modal** (e.g. "Precise location required", "Get rewarded — Fanatically", "Welcome to Fanatics"): use `FindElement` with these `candidates`:
      ```json
      [{"strategy": "xpath", "selector": "//*[@text='Continue']"},
       {"strategy": "xpath", "selector": "//*[@text='Got it']"},
@@ -25,7 +25,7 @@ Your job: launch the app, dismiss any pre-login modals, complete the Fanatics ON
       {"strategy": "accessibility id", "selector": "next button"}]
      ```
      Then `appium_click` with the returned `elementUUID`.
-   - **System permission dialog** (`com.android.permissioncontroller` / `com.google.android.permissioncontroller`): use `FindElementWithFallback` with:
+   - **System permission dialog** (`com.android.permissioncontroller` / `com.google.android.permissioncontroller`): use `FindElement` with:
      ```json
      [{"strategy": "id", "selector": "com.android.permissioncontroller:id/permission_allow_foreground_only_button"},
       {"strategy": "id", "selector": "com.android.permissioncontroller:id/permission_allow_button"},
@@ -44,7 +44,7 @@ Your job: launch the app, dismiss any pre-login modals, complete the Fanatics ON
 
 #### 2a — Email
 
-1. `FindElementWithFallback` candidates:
+1. `FindElement` candidates:
    ```json
    [{"strategy": "xpath", "selector": "//android.widget.EditText[@resource-id='email address text']"},
     {"strategy": "class name", "selector": "android.widget.EditText"},
@@ -56,7 +56,7 @@ Your job: launch the app, dismiss any pre-login modals, complete the Fanatics ON
 
 #### 2b — Continue → password screen
 
-1. `FindElementWithFallback` candidates:
+1. `FindElement` candidates:
    ```json
    [{"strategy": "xpath", "selector": "//*[@text='Continue']"},
     {"strategy": "accessibility id", "selector": "next button"}]
@@ -67,7 +67,7 @@ Your job: launch the app, dismiss any pre-login modals, complete the Fanatics ON
 
 #### 2c — Password
 
-1. `FindElementWithFallback` candidates:
+1. `FindElement` candidates:
    ```json
    [{"strategy": "xpath", "selector": "//android.widget.EditText[@resource-id='password text']"},
     {"strategy": "class name", "selector": "android.widget.EditText"},
@@ -79,7 +79,7 @@ Your job: launch the app, dismiss any pre-login modals, complete the Fanatics ON
 
 #### 2d — Submit → OTP
 
-1. `FindElementWithFallback` candidates:
+1. `FindElement` candidates:
    ```json
    [{"strategy": "xpath", "selector": "//*[@text='Log in']"},
     {"strategy": "xpath", "selector": "//*[@text='Sign In']"},
@@ -94,7 +94,7 @@ Your job: launch the app, dismiss any pre-login modals, complete the Fanatics ON
 
 1. Detect: text contains `One time passcode` or EditText `resource-id="mfa code text"`.
 2. **OTP source — follow the OTP policy from Identity**: `AUTO-OTP` → use `{{DEFAULT_OTP}}` directly. `ASK-USER-OTP` → `next='question'` with prompt: "Please enter the OTP sent via SMS."
-3. `FindElementWithFallback` candidates:
+3. `FindElement` candidates:
    ```json
    [{"strategy": "xpath", "selector": "//android.widget.EditText[@resource-id='mfa code text']"},
     {"strategy": "class name", "selector": "android.widget.EditText"},
@@ -102,7 +102,7 @@ Your job: launch the app, dismiss any pre-login modals, complete the Fanatics ON
    ```
 4. `appium_click` elementUUID=(returned)
 5. `appium_set_value` elementUUID=(same) text=`{{DEFAULT_OTP}}` (always quoted as a STRING).
-6. `FindElementWithFallback` for the submit button:
+6. `FindElement` for the submit button:
    ```json
    [{"strategy": "xpath", "selector": "//*[@text='Done']"},
     {"strategy": "xpath", "selector": "//*[@text='Verify']"},

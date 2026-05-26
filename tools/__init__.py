@@ -1,15 +1,15 @@
 from .change_goal import change_goal
 from .casino_qa import (
-    budget_check,
+    check_budget,
     detect_screen,
-    find_element_with_fallback,
+    find_element,
     generate_report,
-    lookup_coords,
+    lookup_element_coords,
     parse_session_intent,
     read_balance,
     resolve_directory,
     save_evidence,
-    smart_tap,
+    tap_mapped,
     tap_coordinate,
     verify_tap,
     wait_for_signature,
@@ -92,14 +92,14 @@ def get_handler(tool_name: str):
         return tap_coordinate
     if tool_name == "DetectScreen":
         return detect_screen
-    if tool_name == "FindElementWithFallback":
-        return find_element_with_fallback
-    if tool_name == "LookupCoords":
-        return lookup_coords
+    if tool_name == "FindElement":
+        return find_element
+    if tool_name == "LookupElementCoords":
+        return lookup_element_coords
     if tool_name == "VerifyTap":
         return verify_tap
-    if tool_name == "SmartTap":
-        return smart_tap
+    if tool_name == "TapMapped":
+        return tap_mapped
     if tool_name == "SaveEvidence":
         return save_evidence
     if tool_name == "GenerateReport":
@@ -112,8 +112,8 @@ def get_handler(tool_name: str):
         return resolve_directory
     if tool_name == "ReadBalance":
         return read_balance
-    if tool_name == "BudgetCheck":
-        return budget_check
+    if tool_name == "CheckBudget":
+        return check_budget
     if tool_name == "WaitForSignature":
         return wait_for_signature
 

@@ -3,7 +3,7 @@ import os
 from ._deps import get_screen_db
 
 
-def lookup_coords(args: dict) -> dict:
+def lookup_element_coords(args: dict) -> dict:
     """Look up stored coordinates for an element from the screen map DB.
 
     Args:
@@ -47,7 +47,7 @@ def lookup_coords(args: dict) -> dict:
             guess["x"], guess["y"],
             source="cross_device",
             element_type=guess.get("element_type"),
-            intent=guess.get("intent"),
+            purpose=guess.get("purpose"),
             confidence=0.3,
         )
         return {
