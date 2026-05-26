@@ -59,4 +59,4 @@ evidence/
 reports/
 
 # Reference/external repos cloned alongside the project
-SlotBot/
+SlotBot/:memory:
