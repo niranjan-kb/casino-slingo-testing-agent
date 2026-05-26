@@ -1,9 +1,28 @@
+import re
 from collections import deque
 from datetime import timedelta
 from typing import Any, Deque, Dict, List, Optional, TypedDict, Union
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
+
+# Spec 006 T301 — page-source title extraction for the auto-seed fallback.
+# Page source is an Appium-emitted Android XML dump. UI text lives in
+# `text="..."` attributes — but the Fanatics casino mounts its games in a
+# WebView, and Android serializes WebView-internal elements with HTML-encoded
+# attribute delimiters: `text=&quot;...&quot;`. We need to capture both forms,
+# or the WebView-hosted game titles (which is where the slug actually lives)
+# never appear in the candidate list. Live 2026-05-22: SWEET 16 BLACKJACK
+# is inside the WebView; v3 regex missed it until this alternation went in.
+_PAGE_SOURCE_TEXT_RE = re.compile(r'text="([^"]+)"|text=&quot;([^&]+?)&quot;')
+_SLUG_NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
+
+
+def _slugify_title(text: str) -> str:
+    """Lowercase + collapse non-alphanum to hyphens (mirrors
+    observers/screen_identity._slugify). 'Sweet 16 Blackjack' →
+    'sweet-16-blackjack'. Module-level so replay sees the same result."""
+    return _SLUG_NON_ALNUM_RE.sub("-", (text or "").lower()).strip("-")
 
 from models.data_types import (
     ConversationHistory,
@@ -332,6 +351,33 @@ class AgentGoalWorkflow:
                                 f"completed_nodes={self.completed_nodes}; "
                                 f"keeping previous intent"
                             )
+                            # Spec 006 T301 follow-up — feed the rejection back
+                            # to the LLM. Without this nudge it cannot tell its
+                            # last emission was discarded and re-emits the same
+                            # intent every turn (live 2026-05-22: 3+ consecutive
+                            # blocks on None -> intent_play_game when post-auth
+                            # deep-linked into a game). Push a directive that
+                            # names the unmet precondition explicitly.
+                            unmet = self._unmet_precondition_for(new_active_intent)
+                            directive = (
+                                f"### Plan-graph guard rejected "
+                                f"`active_intent={new_active_intent}` because "
+                                f"its `requires` precondition is not satisfied. "
+                                f"completed_nodes={self.completed_nodes}. "
+                            )
+                            if unmet:
+                                directive += (
+                                    f"You must first complete `{unmet}` (emit "
+                                    f"`next='done'` with `active_intent="
+                                    f"intent_{unmet}` if its end-state is observed). "
+                                )
+                            directive += (
+                                "If the device is already at the next intent's "
+                                "end-state (e.g. landed at a game via a deep "
+                                "link), mark the prerequisite intent complete "
+                                "with `next='done'` BEFORE picking the next one."
+                            )
+                            self.prompt_queue.append(directive)
                             # Fall back: don't update self.active_intent. The
                             # planner sees the same intent context next turn and
                             # should re-plan. Save evidence is best-effort —
@@ -366,6 +412,35 @@ class AgentGoalWorkflow:
                 workflow.logger.info(
                     f"next_step: {next_step}, current tool is {current_tool}"
                 )
+
+                # Defensive: `next='confirm'` without a `tool` is a malformed
+                # emission (confirm means "execute the tool I named"). Live
+                # 2026-05-22 showed the LLM emitting this when it observed a
+                # state that didn't require a tool but failed to also emit
+                # `next='done'`. Without recovery the workflow loop blocks on
+                # wait_condition forever (no prompt queued, no confirmation).
+                # Push a corrective directive so the LLM retries.
+                if next_step == "confirm" and not current_tool:
+                    workflow.logger.warning(
+                        "planner emitted next=confirm with no tool; "
+                        "re-prompting for a valid emission"
+                    )
+                    self.prompt_queue.append(
+                        "### Your last emission was `next='confirm'` with no "
+                        "`tool` — that combination is invalid (confirm means "
+                        "execute the tool you named). If you have nothing to "
+                        "do for the current active_intent (e.g. the device is "
+                        "already at its end-state), emit `next='done'` with "
+                        "the same `active_intent`. Otherwise pick a real tool."
+                    )
+                    await helpers.continue_as_new_if_needed(
+                        self.conversation_history,
+                        self.prompt_queue,
+                        self.goal,
+                        MAX_TURNS_BEFORE_CONTINUE,
+                        self.add_message,
+                    )
+                    continue
 
                 # make sure we're ready to run the tool & have everything we need
                 if next_step == "confirm" and current_tool:
@@ -814,17 +889,36 @@ class AgentGoalWorkflow:
         """Fire T201/T202/T204 after intent_navigate_to_game completes.
 
         Best-effort by design (Constitution III — observers/auto-seed never
-        halt the goal loop). Without a resolved slug we skip silently; the
-        play loop falls back to LLM-only reasoning (no L4 layer).
+        halt the goal loop). Resolution order for the slug:
+
+            1. ResolveDirectory hit captured during navigate (`last_resolved_slug`)
+            2. `session_intent.target.slug` (operator named an exact slug)
+            3. Spec 006 T301 fallback — derive from the loaded screen's page
+               source: find the longest text matching the kind hint and
+               slugify it. Covers the "vague-prompt + empty-directory + reached-
+               via-search" path that ResolveDirectory cannot resolve.
+
+        If all three miss, skip silently; the play loop falls back to
+        LLM-only reasoning without the L4 game-knowledge layer.
         """
+        kind_hint = self.last_resolved_kind or self._kind_from_session_intent()
         slug = self.last_resolved_slug or self._slug_from_session_intent()
+        derived_display_name: Optional[str] = None
+        if not slug:
+            derived = self._derive_slug_from_recent_page_source(kind_hint)
+            if derived is not None:
+                slug, derived_display_name = derived
+                workflow.logger.info(
+                    f"auto-seed derived slug from page source: "
+                    f"slug={slug}, display_name={derived_display_name}"
+                )
         if not slug:
             workflow.logger.info(
-                "auto-seed skipped: no resolved slug from ResolveDirectory or "
-                "session_intent.target"
+                "auto-seed skipped: no resolved slug from ResolveDirectory, "
+                "session_intent.target, or page-source fallback"
             )
             return
-        kind = self.last_resolved_kind or self._kind_from_session_intent()
+        kind = kind_hint
         loaded_signature = self.last_loaded_signature
         workflow.logger.info(
             f"auto-seed firing: slug={slug}, kind={kind}, "
@@ -833,14 +927,17 @@ class AgentGoalWorkflow:
 
         # T201 — refresh directory row (idempotent; lobby walk may already
         # have populated everything except loaded_signature).
+        dir_payload: Dict[str, Any] = {
+            "slug": slug,
+            "kind": kind,
+            "loaded_signature": loaded_signature,
+            "seen_in_lobby": False,
+        }
+        if derived_display_name:
+            dir_payload["display_name"] = derived_display_name
         await workflow.execute_activity(
             upsert_game_directory_activity,
-            {
-                "slug": slug,
-                "kind": kind,
-                "loaded_signature": loaded_signature,
-                "seen_in_lobby": False,
-            },
+            dir_payload,
             start_to_close_timeout=timedelta(seconds=10),
             retry_policy=RetryPolicy(
                 initial_interval=timedelta(seconds=1),
@@ -894,6 +991,105 @@ class AgentGoalWorkflow:
         slug = target.get("slug")
         return slug if isinstance(slug, str) and slug.strip() else None
 
+    def _derive_slug_from_recent_page_source(
+        self, kind_hint: Optional[str]
+    ) -> Optional[tuple]:
+        """Spec 006 T301 — derive (slug, display_name) from the last page source.
+
+        Used when ResolveDirectory came back unresolved but the agent reached
+        a loaded game via search/scroll. Walks `self.tool_results` in reverse
+        for the most recent `appium_get_page_source` result, then scans its
+        text attributes for nodes containing the kind hint (e.g. 'blackjack').
+
+        Picks the candidate that most plausibly looks like a game *title* —
+        not an in-game status banner. Game titles in the Fanatics casino
+        WebView are typically Title Case ("Sweet 16 Blackjack"), 2-5 tokens,
+        and free of sentence punctuation. The first iteration of this method
+        (which just took the longest match) picked up the banner
+        "PLAYER HAS BLACKJACK, DEALER HAS ACE FACE UP" because it was the
+        longest blackjack-containing string on the screen — this version
+        rules that class out by scoring.
+
+        Returns (slug, display_name) or None. Pure-deterministic over
+        workflow state — tool_results are already in workflow history.
+        """
+        if not kind_hint:
+            return None
+        page_source = self._latest_page_source_text()
+        if not page_source:
+            return None
+        kind_lc = kind_hint.lower()
+        best: Optional[tuple] = None  # (score, value)
+        for match in _PAGE_SOURCE_TEXT_RE.finditer(page_source):
+            # Group 1: literal-quoted (top-level Appium). Group 2: HTML-encoded
+            # (WebView-hosted, e.g. game canvas). Whichever matched, that's
+            # the candidate text.
+            value = (match.group(1) or match.group(2) or "").strip()
+            # Strip game-provider prefix: WebView titles for HTML5 games carry
+            # the platform/vendor tag in front of the actual title, separated
+            # by " - ". Example: "LnW Spark - SWEET 16 BLACKJACK" (Light &
+            # Wonder's HTML5 platform). The slug we want is the title proper.
+            # Strip the LAST segment after the final " - " — that's the title.
+            if " - " in value:
+                value = value.rsplit(" - ", 1)[-1].strip()
+            if not (5 <= len(value) <= 60):
+                continue
+            if kind_lc not in value.lower():
+                continue
+            tokens = [t for t in re.split(r"\s+", value) if t]
+            # Game titles are 2-5 tokens. Single words are usually just the
+            # bare kind name; 6+ tokens are sentences/banners.
+            if not (2 <= len(tokens) <= 5):
+                continue
+            # Sentence punctuation = banner/instruction, not a title.
+            if any(ch in value for ch in (",", ".", ":", "!", "?", ";")):
+                continue
+            # The kind word should sit at the END of a real game title:
+            # "Sweet 16 Blackjack", "Lightning Roulette", "Fanatics Spin to Win".
+            # Marketing text ("WIN A BLACKJACK BONUS") and instructions
+            # ("PLAY BLACKJACK NOW") bury the kind earlier — that's how we
+            # discriminate. The only legit exception is the 2-token variant
+            # pattern ("Blackjack MH", "Roulette VIP") where the kind is
+            # first and the second token is a short qualifier.
+            last_token_lc = tokens[-1].lower()
+            kind_at_end = kind_lc in last_token_lc
+            kind_at_two_token_head = (
+                len(tokens) == 2 and kind_lc in tokens[0].lower()
+            )
+            if not (kind_at_end or kind_at_two_token_head):
+                continue
+            # Score: prefer 2-4 token titles, mild bonus for length within range.
+            score = len(value) + (5 if 2 <= len(tokens) <= 4 else 0)
+            if best is None or score > best[0]:
+                best = (score, value)
+        if best is None:
+            return None
+        display_name = best[1]
+        slug = _slugify_title(display_name)
+        if not slug:
+            return None
+        return slug, display_name
+
+    def _latest_page_source_text(self) -> Optional[str]:
+        """Return the text payload from the most recent appium_get_page_source
+        tool result, or None if none captured yet. MCP results land in
+        tool_results as {tool, content: [str, ...]} per _normalize_result;
+        the page source is the first string in the content list, prefixed
+        with 'Page source retrieved successfully: ' and a fenced XML block."""
+        for entry in reversed(self.tool_results):
+            if not isinstance(entry, dict):
+                continue
+            if entry.get("tool") != "appium_get_page_source":
+                continue
+            content = entry.get("content")
+            if isinstance(content, list) and content:
+                first = content[0]
+                if isinstance(first, str) and len(first) > 100:
+                    return first
+            elif isinstance(content, str) and len(content) > 100:
+                return content
+        return None
+
     def _kind_from_session_intent(self) -> Optional[str]:
         if not self.session_intent:
             return None
@@ -901,6 +1097,29 @@ class AgentGoalWorkflow:
         kind = target.get("kind")
         if isinstance(kind, str) and kind.strip() and kind != "any":
             return kind
+        return None
+
+    def _unmet_precondition_for(self, intent_id: Optional[str]) -> Optional[str]:
+        """Return the plan-graph node name that gates `intent_id` but isn't yet
+        completed, or None if the precondition is satisfied or unknowable.
+
+        Used by the guard-rejection directive (spec 006 T301 follow-up) so the
+        LLM can be told *which* prior intent it needs to mark done before
+        proceeding. Mirrors the node-lookup logic in `is_intent_reachable` —
+        pure-functional over plan_graph + completed_nodes; no I/O.
+        """
+        if not intent_id or self.plan_graph is None:
+            return None
+        nodes = self.plan_graph.get("nodes") or {}
+        for _name, defn in nodes.items():
+            if defn.get("intent") != intent_id:
+                continue
+            requires = defn.get("requires")
+            if not requires or requires == "any_terminal":
+                return None
+            pred = requires.split(".", 1)[0]
+            if pred not in self.completed_nodes:
+                return pred
         return None
 
     def _mark_plan_node_completed(self, intent_id: str) -> None:

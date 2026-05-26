@@ -32,7 +32,14 @@ with workflow.unsafe.imports_passed_through():
 TOOL_ACTIVITY_START_TO_CLOSE_TIMEOUT = timedelta(seconds=12)
 TOOL_ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT = timedelta(minutes=30)
 MCP_TOOL_ACTIVITY_START_TO_CLOSE_TIMEOUT = timedelta(seconds=60)
-LLM_ACTIVITY_START_TO_CLOSE_TIMEOUT = timedelta(seconds=20)
+# Bedrock under load has been observed at ~2-minute response latency for the
+# Sonnet-4.5 planner call (live 2026-05-21). The earlier 20s start-to-close
+# caused every retry to throw away the eventual successful response with an
+# "Activity not found on completion" — Temporal had already given up on the
+# attempt by the time Bedrock replied. 180s gives the slow-tail enough room
+# without making a truly hung call wait forever (the 30-min schedule-to-close
+# is still the absolute backstop).
+LLM_ACTIVITY_START_TO_CLOSE_TIMEOUT = timedelta(seconds=180)
 LLM_ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT = timedelta(minutes=30)
 
 
